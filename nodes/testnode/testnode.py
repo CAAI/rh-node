@@ -44,7 +44,7 @@ class TestNode(RHNode):
         
         #Wait for node 2 to finish and multiply it
         outputs_2 = add_2_node.wait_for_finish()
-
+        
         return TestOutputs(message="Hello World", img1=outpath, img2=outputs_2["out_file"])
     
 

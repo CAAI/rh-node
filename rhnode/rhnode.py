@@ -16,7 +16,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from jinja2 import Environment, PackageLoader
 from contextlib import asynccontextmanager
-from .utils import QueueStatus, Job
+from .utils import QueueStatus, Job, _create_file_name_from_key
 from multiprocessing import Process
 from fastapi.responses import FileResponse
 from fastapi.templating import Jinja2Templates
@@ -79,9 +79,9 @@ class RHNode(ABC, FastAPI):
     name: str
     cache_size = 3
     requires_gpu = True
-    cache_directory = "./.cache"
-    task_directory = "./.tasks"
-    input_directory = "./.inputs"
+    cache_directory = ".cache"
+    task_directory = ".tasks"
+    input_directory = ".inputs"
     def __init__(self):
         super().__init__()
 
@@ -194,12 +194,11 @@ class RHNode(ABC, FastAPI):
 
 
     def _cleanup_input_directory(self, directory):
-        out_files = []
-        assert directory.startswith(self.input_directory)
+        assert self.input_directory in str(directory)
         for file in os.listdir(directory):
             fpath = Path(directory,file).absolute()
             os.remove(fpath)
-        
+        os.rmdir(directory)
 
     def _make_input_directory(self, task_id):
         new_dir = self.input_directory + "/" + task_id
@@ -292,12 +291,7 @@ class RHNode(ABC, FastAPI):
             "node_name":self.name,
         }
     
-    def _create_file_name_from_key(self, output_name, file_name):
-        if "." in os.path.basename(file_name):
-            ending = os.path.basename(file_name).split(".")[1:]
-            ending = ".".join(ending)
-            return f"{output_name}.{ending}"
-        return output_name
+    
     
     def _fix_output(self, output):
         outs = []
@@ -379,7 +373,7 @@ class RHNode(ABC, FastAPI):
         @self.get("/", response_class=HTMLResponse)
         async def show_task_status(request: Request):
             # Load the template from the package
-            template = env.get_template('task_status.html')
+            template = env.get_template('index.html')
             formats = []
             for task_id, task in self.task_status.items():
                 formats.append(

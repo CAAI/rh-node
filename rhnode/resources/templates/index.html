@@ -1,0 +1,24 @@
+{% extends "node_base.html" %}
+
+{% block body %}
+
+  <body>
+    <h3 class = "mt-5">Processes</h1>
+    <table class="table">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in tasks %}
+        <tr>
+          <td><a href = "{{item.href}}">{{ item.task_id }}</a></td>
+            <td>{{ item.status }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+{% endblock %}

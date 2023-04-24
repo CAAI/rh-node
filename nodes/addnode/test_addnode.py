@@ -3,17 +3,21 @@ from rhnode import NodeRunner, new_job
 
 data = {
     "scalar": 1,
-    "in_file": "/homes/hinge/Projects/rh-node/nodedata/test/mr.nii.gz"
+    "in_file": "/homes/hinge/Projects/rh-node/test/mr.nii.gz"
 }
 
-job = new_job(prefix="testadd")
+job = new_job()
 
 node = NodeRunner(
     identifier="add",
     host = "localhost",
     port = 8009,
     inputs = data,
-    job = job
+    job = job,
+    output_directory = "."
 )
 
 node.start()
+output = node.wait_for_finish()
+
+print(output)

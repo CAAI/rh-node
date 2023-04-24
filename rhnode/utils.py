@@ -44,18 +44,28 @@ def GET_HOST_FOR_JOB(node):
     port = 8000
     return host, port
 
-def new_job(prefix):
+def new_job(check_cache = True, save_to_cache = True,priority = 2):
     uid = str(uuid.uuid4())
-    job = Job(id = prefix + "_" + uid,
+    job = Job(id=uid,
         device = 0,
-        check_cache = True,
-        save_to_cache = True,
-        directory=None)
+        check_cache = check_cache,
+        save_to_cache = save_to_cache,
+        directory=None,
+        priority = priority)
     return job
+
+
+def _create_file_name_from_key(self, key_name, file_name):
+        if "." in os.path.basename(file_name):
+            ending = os.path.basename(file_name).split(".")[1:]
+            ending = ".".join(ending)
+            return f"{key_name}.{ending}"
+        return key_name
+
 
 class NodeRunner:
 
-    def __init__(self, identifier, inputs, job, port = None, host=None,use_same_gpu=False):
+    def __init__(self, identifier, inputs, job, port = None, host=None,use_same_gpu=False,output_directory=None):
         self.identifier = identifier
         self.input_data = inputs.copy()
         self.job = job.copy()
@@ -63,7 +73,13 @@ class NodeRunner:
         self.ID = None
         self.host = host
         self.use_same_gpu = use_same_gpu
+        if output_directory is None:
+            if job.directory is None:
+                output_directory = "./output"
+            else:
+                output_directory = job.directory
 
+        self.output_directory = output_directory
         if (port is None ) ^ (host is None):
             raise Exception("Specify both port and host or neither")
 
@@ -132,25 +148,43 @@ class NodeRunner:
     def wait_for_finish(self):
 
         assert self.ID is not None, "Not started"
-
+        output_path = _create_output_directory(self.output_directory,self.identifier)
         headers = {
             "Content-Type": "application/json",
             "Accept": "application/json"
         }
-        
-        while True:
+        output = None
+        while output is None:
             url = f"http://{self.host}:{self.port}/get/{self.ID}"
             response = requests.request("GET", url, headers=headers)
             response.raise_for_status()
             response_json = response.json()
             status = response_json["status"]
             if QueueStatus(status) == QueueStatus.Finished:
-                return response_json["output"]
+                break
             elif QueueStatus(status) == QueueStatus.Error:
                 raise Exception("Error in queue")
             else:
                 time.sleep(2)
-            
+        url = f"http://{self.host}:{self.port}/get2/{self.ID}"
+        response = requests.request("GET", url, headers=headers)
+        response.raise_for_status()
+        output = response.json()
+        for key, value in output.items():
+            if isinstance(value, str):
+                if value.startswith("/download/"):
+                    print("Downloading", key, "...")
+                    url = f"http://{self.host}:{self.port}/download/{self.ID}/{key}"
+
+                    response = requests.get(url)
+                    response.raise_for_status()
+                    fname = response.headers['Content-Disposition'].split('=')[1].replace('"','')
+                    fname = Path(os.path.join(output_path,fname)).absolute()
+                    with open(fname, 'wb') as f:
+                        f.write(response.content)
+                    output[key] = fname
+        
+        return output
 def replace_paths_with_strings(inp):
     if isinstance(inp, BaseModel):
         inp = inp.dict()
@@ -160,3 +194,15 @@ def replace_paths_with_strings(inp):
         else:
             inp[key] = val
     return inp
+
+
+def _create_output_directory(base_directory, node_name):
+    directory = os.path.join(base_directory, node_name)
+    i = 1
+    while True:
+        if not os.path.exists(directory):
+            break
+        directory = os.path.join(base_directory, node_name + "_" + str(i))
+        i += 1
+    os.makedirs(directory)
+    return directory
