@@ -16,7 +16,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from jinja2 import Environment, PackageLoader
 from contextlib import asynccontextmanager
-from .utils import QueueStatus, Job, _create_file_name_from_key
+from .utils import QueueStatus, Job
 from multiprocessing import Process
 from fastapi.responses import FileResponse
 from fastapi.templating import Jinja2Templates
@@ -60,6 +60,7 @@ def create_model_no_files(cls: Type[BaseModel]) -> Type[BaseModel]:
     return create_model(cls.__name__ + "INIT", **fields)
 
 
+
 # Define a Jinja2 environment that can load templates from a package
 
 env = Environment(loader=PackageLoader(__name__, 'resources/templates'))
@@ -82,9 +83,15 @@ class RHNode(ABC, FastAPI):
     cache_directory = ".cache"
     task_directory = ".tasks"
     input_directory = ".inputs"
-    def __init__(self):
+    def __init__(self,other_node_addresses=None):
         super().__init__()
 
+        if other_node_addresses is None:
+            self.other_node_addresses = {}
+        else:
+            assert isinstance(other_node_addresses, dict)
+            self.other_node_addresses = other_node_addresses
+        
         self.cache = Cache(self.cache_directory, self.output_spec, self.input_spec,self.cache_size)
         
         self.task_status = {
@@ -96,9 +103,10 @@ class RHNode(ABC, FastAPI):
 
 
         self.setup_routes()
-    # def receive_rhserver_handle(self, RHServer):
-    #     self.RHServer = RHServer
 
+
+    def get_manager_host_and_port(self):
+        return self.other_node_addresses.get("manager", "manager:8000")
 
     def get_queue_status(self,queue_id):
         
@@ -106,7 +114,7 @@ class RHNode(ABC, FastAPI):
             "Content-Type": "application/json",
             "Accept": "application/json"
         }
-        url = f"http://manager:8000/queue/status/{queue_id}"
+        url = f"http://{self.get_manager_host_and_port()}/queue/status/{queue_id}"
         response = requests.request("GET", url, headers=headers)
 
         # Check for errors
@@ -122,7 +130,7 @@ class RHNode(ABC, FastAPI):
             "Content-Type": "application/json",
             "Accept": "application/json"
         }
-        url = f"http://manager:8000/queue/add"
+        url = f"http://{self.get_manager_host_and_port()}/queue/add"
         response = requests.request("GET", url, headers=headers)
 
         # Check for errors
@@ -139,7 +147,7 @@ class RHNode(ABC, FastAPI):
             "Content-Type": "application/json",
             "Accept": "application/json"
         }
-        url = f"http://manager:8000/queue/remove/{queue_id}"
+        url = f"http://{self.get_manager_host_and_port()}/queue/remove/{queue_id}"
         response = requests.request("GET", url, headers=headers)
 
         # Check for errors
@@ -319,6 +327,15 @@ class RHNode(ABC, FastAPI):
 
         return self.output_spec_url(**new_d)
 
+            
+    def _create_file_name_from_key(self, key_name, file_name):
+        if "." in os.path.basename(file_name):
+            ending = os.path.basename(file_name).split(".")[1:]
+            ending = ".".join(ending)
+            return f"{key_name}.{ending}"
+        return key_name
+
+
     def setup_routes(self):
 
         class GetResponse(BaseModel):
@@ -413,11 +430,11 @@ class RHNode(ABC, FastAPI):
             return {"status": "Files uploaded successfully"}
 
         self.mount("/static", StaticFiles(directory=os.path.dirname(__file__)+"/resources/static"), name="static")
-        
-        @staticmethod   
-        @abstractmethod
-        def process(inputs, job):
-            pass
+
+    @staticmethod   
+    @abstractmethod
+    def process(inputs, job):
+        pass
 
 
 

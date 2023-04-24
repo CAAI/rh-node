@@ -14,7 +14,6 @@ node = NodeRunner(
     port = 8009,
     inputs = data,
     job = job,
-    output_directory = "."
 )
 
 node.start()

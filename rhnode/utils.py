@@ -2,20 +2,18 @@ from pathlib import Path
 import requests
 from enum import Enum
 import uuid
-from pydantic import BaseModel, FilePath, DirectoryPath
+from pydantic import BaseModel, DirectoryPath
 import time
-from time import strftime
 import os 
 from typing import Union
 
 class Job(BaseModel):
     id: str
-    device: int = None
+    device: Union[None, int]
     check_cache: bool = True
     save_to_cache: bool = True
     priority: int = 2
-    directory: Union[None,DirectoryPath] = None
-
+    directory: Union[None, DirectoryPath] = None
 
 class QueueStatus(Enum):
     Preparing= -1
@@ -24,7 +22,6 @@ class QueueStatus(Enum):
     Running = 2
     Finished = 3
     Error = 4
-
 
 def GET_HOST_FOR_JOB(node):
     headers = {
@@ -47,20 +44,13 @@ def GET_HOST_FOR_JOB(node):
 def new_job(check_cache = True, save_to_cache = True,priority = 2):
     uid = str(uuid.uuid4())
     job = Job(id=uid,
-        device = 0,
+        device = None,
         check_cache = check_cache,
         save_to_cache = save_to_cache,
         directory=None,
         priority = priority)
     return job
 
-
-def _create_file_name_from_key(self, key_name, file_name):
-        if "." in os.path.basename(file_name):
-            ending = os.path.basename(file_name).split(".")[1:]
-            ending = ".".join(ending)
-            return f"{key_name}.{ending}"
-        return key_name
 
 
 class NodeRunner:
@@ -93,10 +83,6 @@ class NodeRunner:
             "Content-Type": "application/json",
             "Accept": "application/json"
         }
-
-        #job = replace_paths_with_strings(self.job)
-       # if not self.use_same_gpu:
-        #    job["device"] = 0
 
         input_data = replace_paths_with_strings(self.input_data)
 
@@ -136,6 +122,7 @@ class NodeRunner:
                 response.raise_for_status()
 
         ## RUN The thing
+
         #data = {"test": "hejsa"}
         print(data)
         print(f"Starting job on {self.host}:{self.port} with ID:", self.ID)
@@ -166,6 +153,7 @@ class NodeRunner:
                 raise Exception("Error in queue")
             else:
                 time.sleep(2)
+
         url = f"http://{self.host}:{self.port}/get2/{self.ID}"
         response = requests.request("GET", url, headers=headers)
         response.raise_for_status()
@@ -185,6 +173,8 @@ class NodeRunner:
                     output[key] = fname
         
         return output
+
+
 def replace_paths_with_strings(inp):
     if isinstance(inp, BaseModel):
         inp = inp.dict()

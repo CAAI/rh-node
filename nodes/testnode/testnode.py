@@ -11,6 +11,7 @@ from fastapi.staticfiles import StaticFiles
 class TestInputs(BaseModel):
     multiplier: int
     in_file: FilePath = "/homes/hinge/Projects/rhnode/testdata/test22.nii"
+
 class TestOutputs(BaseModel):
     message: str
     img1: FilePath

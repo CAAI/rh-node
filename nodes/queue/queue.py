@@ -2,11 +2,11 @@
 from fastapi import FastAPI, Request
 import requests
 from fastapi.responses import HTMLResponse
-from jinja2 import Environment, PackageLoader
+from jinja2 import Environment, FileSystemLoader
 import uuid
 import os
 
-env = Environment(loader=PackageLoader(__name__, os.path.dirname(__file__)+"/resources/templates"))
+env = Environment(loader=FileSystemLoader(os.path.dirname(__file__)+"/resources/templates"))
 
 class Queue:
     def __init__(self):
@@ -97,9 +97,6 @@ class CudaQueue:
     def has_available_gpu(self):
         return  any([ID == None for ID in self.gpu_to_job.values()])
 
-
-
-
 class RHServer(FastAPI):
     def __init__(self,other_hosts=[]):
         super().__init__()
@@ -115,7 +112,7 @@ class RHServer(FastAPI):
     def has_available_gpu(self):
         return self.cuda_queue.has_available_gpu()
 
-    def get_host_to_run_node(self, node_name,):
+    def get_host_to_run_node(self, node_name):
         return node_name
         
         if not self.node_requires_gpu[node_name]:
@@ -199,7 +196,7 @@ class RHServer(FastAPI):
                         "gpu_id": gpu_id,
                     }
                 )
-            
+
             # Render the template with the tasks
             html_content = template.render(active=formats,queued=queued)
 
