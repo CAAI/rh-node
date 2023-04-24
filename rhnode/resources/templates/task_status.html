@@ -1,0 +1,39 @@
+{% extends "node_base.html" %}
+
+{% block body %}
+
+  <body>
+    <h1>Test Upload Input</h1>
+    <form action="/upload/" method="post" enctype="multipart/form-data">
+      <label for="inputA">Input A:</label>
+      <input type="text" id="inputA" name="inputA"><br><br>
+
+      <label for="inputB">Input B:</label>
+      <input type="number" id="inputB" name="inputB"><br><br>
+
+      <label for="inputC">Input C:</label>
+      <input type="file" id="inputC" name="inputC"><br><br>
+
+      <input type="submit" value="Submit">
+    </form>
+  </body>
+
+    <h3 class = "mt-5">Processes</h1>
+    <table class="table">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in tasks %}
+        <tr>
+          <td><a href = "{{item.href}}">{{ item.task_id }}</a></td>
+            <td>{{ item.status }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+{% endblock %}

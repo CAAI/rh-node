@@ -1,0 +1,6 @@
+fastapi
+pydantic
+uvicorn
+requests
+jinja2
+nibabel

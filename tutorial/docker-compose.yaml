@@ -1,0 +1,73 @@
+
+version: "1"
+services:
+  manager:
+    build: 
+      context: .
+      dockerfile: Dockerfile.manager
+    ports:
+      - "8000:8000"
+
+  testnode:
+    build: 
+      context: .
+      dockerfile: Dockerfile.testnode
+
+    ports:
+      - "8002:8000"
+    volumes:
+      - ./nodedata:/nodedata
+
+  zerodose:
+    build: 
+      context: .
+      dockerfile: Dockerfile.zerodose
+
+    ports:
+      - "8008:8000"
+    volumes:
+      - ./nodedata:/nodedata
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  hdbet:
+    build: 
+      context: .
+      dockerfile: Dockerfile.hdbet
+
+    ports:
+      - "8009:8000"
+    volumes:
+      - ./nodedata:/nodedata
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+  add:
+    build: 
+      context: .
+      dockerfile: Dockerfile.addnode
+
+    ports:
+      - "8003:8000"
+    volumes:
+      - ./nodedata:/nodedata
+
+  dicomnode:
+    build:
+      context: .
+      dockerfile: Dockerfile.dcm_zerodose
+    ports:
+      - "4322:4322"
+    environment:
+      - PORT=4322
+    volumes:
+    - ./nodedata:/nodedata

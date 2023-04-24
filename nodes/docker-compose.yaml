@@ -1,0 +1,81 @@
+version: "1"
+services:
+
+  #Queue Node
+  manager:
+    build: 
+      context: ../
+      dockerfile: nodes/queue/Dockerfile
+    ports:
+      - "8000:8000"
+
+  #HD BET Node
+  hdbet:
+    build: 
+      context: ../
+      dockerfile: nodes/hdbet/Dockerfile
+
+    ports:
+      - "8005:8000"
+    volumes:
+      - ../data:/nodedata
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+  # Zerodose Node
+  zerodose:
+    build: 
+      context: ../
+      dockerfile: nodes/zerodose/Dockerfile
+
+    ports:
+      - "8002:8000"
+    volumes:
+      - ../data:/nodedata
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+
+  # Zerodose Node
+  testnode:
+    build: 
+      context: ../
+      dockerfile: nodes/testnode/Dockerfile
+
+    ports:
+      - "8003:8000"
+    volumes:
+      - ../data:/nodedata
+
+  # Zerodose Node
+  addnode:
+    build: 
+      context: ../
+      dockerfile: nodes/addnode/Dockerfile
+
+    ports:
+      - "8010:8000"
+    volumes:
+      - ../data:/nodedata
+
+  # Zerodose Dicom
+  zerodose_dicom:
+    build:
+      context: ../
+      dockerfile: nodes/zerodose_dicom/Dockerfile
+    ports:
+      - "8007:8000"
+    environment:
+      - PORT=8000
+    volumes:
+    - ../data:/nodedata
+

@@ -1,0 +1,30 @@
+{% extends "node_base.html" %}
+
+{% block body %}
+    <h3 class = "mt-5">{{queue_id}}</h1>
+    <h4 class = "mt-5">{{status}}</h1>
+    {% if outputs is not none %}
+    <table class="table">
+      <thead>
+        <tr>
+          <th>field</th>
+          <th>value</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in outputs %}
+        <tr>
+            <td>{{ item.name }}</td>
+            <td>
+                {% if "href" in item %}
+                <a href='{{item.href}}'>{{ item.val }}</a>
+                {% else %}
+                {{ item.val }}
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+{% endblock %}
