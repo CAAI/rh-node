@@ -16,9 +16,11 @@ RUN pip install -r requirements.txt
 RUN pip install -U numpy
 ENV PYTHONUNBUFFERED 1
 
-# Changes frequently
-COPY . .
-RUN pip install -e .
+#Changes frequently
+COPY rhnode rhnode
+COPY setup.py .
+COPY README.md .
+RUN pip install -e . --no-deps
 COPY nodes/hdbet /app
 WORKDIR /app
 

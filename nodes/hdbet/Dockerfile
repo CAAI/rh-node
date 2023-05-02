@@ -10,15 +10,17 @@ RUN pip install ./HD-BET
 #RUN python -c "from HD_BET import utils; [utils.maybe_download_parameters(i) for i in range(5)]"
 COPY requirements.txt .
 RUN pip install -r requirements.txt
-COPY nodes/hdbet/requirements.txt .
+COPY nodes/hdbet/requirements.txt requirements2.txt
 RUN pip install -r requirements.txt
 RUN pip install -U numpy
-ENV PYTHONUNBUFFERED 1
 
 #Changes frequently
-COPY . .
-RUN pip install -e .
+COPY rhnode rhnode
+COPY setup.py .
+COPY README.md .
+RUN pip install -e . --no-deps
 COPY nodes/hdbet /app
 WORKDIR /app
+ENV PYTHONUNBUFFERED 1
 
 CMD ["uvicorn", "hdbet:app", "--host", "0.0.0.0", "--port", "8000"]
