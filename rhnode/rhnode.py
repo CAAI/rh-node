@@ -542,7 +542,7 @@ class RHNode(ABC, FastAPI):
                     self.register_with_manager()
                     success = True
                     break
-                except ConnectionError:
+                except:
                     await asyncio.sleep(2)
             if not success:
                 print("Could not register with manager")
