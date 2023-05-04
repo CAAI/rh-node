@@ -7,7 +7,7 @@ RUN apt-get install git -y
 #General requirements
 RUN git clone https://github.com/MIC-DKFZ/HD-BET
 RUN pip install ./HD-BET
-#RUN python -c "from HD_BET import utils; [utils.maybe_download_parameters(i) for i in range(5)]"
+RUN python -c "from HD_BET import utils; [utils.maybe_download_parameters(i) for i in range(5)]"
 COPY requirements.txt .
 RUN pip install -r requirements.txt
 COPY nodes/hdbet/requirements.txt requirements2.txt

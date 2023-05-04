@@ -129,15 +129,16 @@ class RHServer(FastAPI):
         self.nodes = {}
         self.other_addrs = self._get_other_hosts()
         self.host_addr = self._get_own_host()
+
         self.queue = ResourceQueue(
-            available_gpus_mem = [6],
-            available_cores = 8,
-            available_memory = 16
+            available_gpus_mem = [int(x) for x in os.environ['RH_GPU_MEM'].split(",")],
+            available_cores = int(os.environ['RH_PROCESSES']),
+            available_memory = int(os.environ['RH_MEMORY'])
         )
         self.setup_routes()
 
     def _get_own_host(self):
-        return os.environ.get('RH_ADDRESS', socket.gethostname()+":9050")
+        return os.environ.get('RH_NAME', socket.gethostname()+":9050")
     
     def _get_other_hosts(self):
         if not os.environ.get('RH_OTHER_ADDRESSES'):
@@ -147,43 +148,23 @@ class RHServer(FastAPI):
     def has_node(self, node_name):
         return node_name in self.nodes.keys()
 
-    def has_available_gpu(self):
-        return self.cuda_queue.has_available_gpu()
-
-    ## Called by other dispatchers
-    def get_port(self, node_name):
-        return self.nodes[node_name]["port"]
-
     ## Called by NodeRunner
     def get_addr_to_run_node(self, node_name):
         #return node_name
         
-        if not self.node_requires_gpu[node_name]:
-            return node_name+":8000"
-        if self.has_available_gpu():
-            return node_name+":8000"
-        
+        if node_name in self.nodes.keys():
+            return "localhost:8000"
+
         #query other hosts for available gpu
         for addr in self.other_addrs:
-            headers = {
-                "Content-Type": "application/json",
-                "Accept": "application/json"
-            }
-            url = f"http://{addr}/dispatcher/has_node/{node_name}"
-            response = requests.request("GET", url, headers=headers)
+
+            url = f"http://{addr}/manager/dispatcher/has_node/{node_name}"
+            response = requests.get(url)
             response.raise_for_status()
             has_node = response.json()
-            if not has_node:
-                continue
-            url = f"http://localhost:8000/dispatcher/has_available_gpu"
-            response = requests.request("GET", url, headers=headers)
-            response.raise_for_status()
-            has_available_gpu = response.json()
-            if has_available_gpu:
-                return host
-
-        return "localhost"
-
+            if has_node:
+                return addr
+        raise Exception("No servers were found with the node")
 
     def setup_routes(self):
 
@@ -195,10 +176,6 @@ class RHServer(FastAPI):
         @self.get("/manager/dispatcher/has_node/{node_name}")
         def _has_node(node_name):
             return self.has_node(node_name)
-        
-        @self.get("/manager/dispatcher/has_available_gpu")
-        def _has_available_gpu():
-            return self.has_available_gpu()
 
         @self.get("/manager/dispatcher/get_host/{node_name}")
         def _get_host_to_run_node(node_name):
@@ -237,7 +214,10 @@ class RHServer(FastAPI):
         async def get_resource_info():
             return self.queue.get_resource_info()
 
-
+        @self.get("/manager/ping")
+        async def ping():
+            return True
+        
         @self.get("/")
         async def redirect_to_manager(request: Request):
             return RedirectResponse(url="/manager")
@@ -256,6 +236,10 @@ class RHServer(FastAPI):
                 splits = queued_job["job_id"].split("_")
                 queued_job["href"] = "/" + "_".join(splits[:-1]) + "/show/" + splits[-1]
 
+            host_name = self.host_addr.split(":")[0]
+            other_managers = [
+                {"host":addr.split(":")[0], "port":addr.split(":")[1]} for addr in self.other_addrs
+                ]
             gpu_info = []
             for i, (gpu_available,gpu_max) in enumerate(zip(available_resources["gpu_devices_mem_available"], available_resources["gpu_devices_mem_max"])):
                 gpu_info.append(
@@ -267,6 +251,8 @@ class RHServer(FastAPI):
                 )
             nodes = self.nodes.values()
             return templates.TemplateResponse("resource_queue.html", {
+                "host_name": host_name,
+                "linked_servers": other_managers,
                 "request": request,
                 "active_jobs": active_jobs,
                 "queued_jobs": queued_jobs,
@@ -278,6 +264,5 @@ class RHServer(FastAPI):
                 "nodes": nodes
             })
         
-
 
 app = RHServer()

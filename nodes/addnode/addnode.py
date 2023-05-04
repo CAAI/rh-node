@@ -17,15 +17,17 @@ class AddNode(RHNode):
     output_spec = OutputsAdd
     name = "add"
     requires_gpu = True
-    required_gpu_memory_gb = 6
+    required_gb_gpu_memory = 1
+    required_num_processes = 1
+    required_gb_memory = 1    
+
     def process(inputs, job):
         img = nib.load(inputs.in_file)
         arr = img.get_fdata() + inputs.scalar
         img = nib.Nifti1Image(arr, img.affine, img.header)
         outpath = job.directory / "added.nii.gz"
         img.to_filename(outpath)
-        time.sleep(30)
-        #assert 1==2
+        time.sleep(10)
         return OutputsAdd(out_file=outpath,out_message="this worked")
 
-app = AddNode(other_node_addresses={"manager": "localhost:8005"})
+app = AddNode()

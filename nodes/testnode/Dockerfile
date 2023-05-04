@@ -16,3 +16,5 @@ COPY nodes/testnode /app
 WORKDIR /app
 
 CMD ["uvicorn", "testnode:app", "--host", "0.0.0.0", "--port", "8000"]
+
+

@@ -32,6 +32,16 @@ import traceback
 
 
 
+def is_relative_to(a,b):
+    assert isinstance(a, Path)
+    assert isinstance(b, Path)
+    try:
+        a.relative_to(b)
+        return True
+    except ValueError:
+        return False
+
+
 def create_filepath_as_string_model(cls: Type[BaseModel]) -> Type[BaseModel]:
     fields = {}
     for field_name, field in cls.__fields__.items():
@@ -88,9 +98,9 @@ class RHNode(ABC, FastAPI):
     task_directory = ".tasks"
     input_directory = ".inputs"
 
-    required_gpu_memory_gb = 2
-    required_cpu_cores = 1
-    required_memory_gb = 2
+    required_gb_gpu_memory = None
+    required_num_processes = None
+    required_gb_memory = None
 
     def __init__(self,other_node_addresses=None):
 
@@ -125,7 +135,7 @@ class RHNode(ABC, FastAPI):
 
         # Parse the response JSON
         queue_status = response.json()
-
+        
         return queue_status
 
     def queue_cuda_job(self,job,task_id):
@@ -135,9 +145,9 @@ class RHNode(ABC, FastAPI):
         jobreq = JobRequest(
             job_id=queue_id,
             priority=job.priority,
-            required_gpu_mem=self.required_gpu_memory_gb,
-            required_cores=self.required_cpu_cores,
-            required_memory=self.required_memory_gb,
+            required_gpu_mem=self.required_gb_gpu_memory,
+            required_cores=self.required_num_processes,
+            required_memory=self.required_gb_memory,
         )
         response = requests.post(url, json=jobreq.dict())
 
@@ -159,21 +169,22 @@ class RHNode(ABC, FastAPI):
         return queue_id
     
     @asynccontextmanager
-    async def maybe_wait_for_cuda_device(self,job,task_id):
+    async def maybe_wait_for_resources(self,job,task_id):
         
         queue_id = None
-        if job.device is not None:
+        if job.resources_included:
             yield job.device
-        
-        elif not self.requires_gpu:
-            yield None
+
         else:
-            print("Getting into CUDA queue...")
+            print("Getting into resource queue...")
 
             queue_id = self.queue_cuda_job(job,task_id)
-
-            while gpu_id:=self.get_queue_status(queue_id)["gpu_device_id"] is None:
-
+            gpu_id = None
+            while True:
+                status = self.get_queue_status(queue_id)
+                if status["is_active"]:
+                    gpu_id = status["gpu_device_id"]
+                    break
                 ## If the task is cancelled yield None
                 ## THe run function will check for the status and not spawn the process
                 if self.get_task_data(task_id).status == QueueStatus.Cancelling:
@@ -232,7 +243,7 @@ class RHNode(ABC, FastAPI):
             response = cls.process(inputs,job)
             result_queue.put(('success',response))
         except Exception as e:
-            tb_str = traceback.format_exception(etype=type(e), value=e, tb=e.__traceback__)
+            tb_str = traceback.format_exception(type(e), value=e, tb=e.__traceback__)
             result_queue.put(('error', tb_str, str(type(e))))
 
 
@@ -255,7 +266,7 @@ class RHNode(ABC, FastAPI):
         
         self._set_task_data(task_id, QueueStatus.Queued, None)
 
-        async with self.maybe_wait_for_cuda_device(job,task_id) as cuda_device:
+        async with self.maybe_wait_for_resources(job,task_id) as cuda_device:
 
             ## Cancel signal might come in waiting for cuda queue
             if self.get_task_data(task_id).status == QueueStatus.Cancelled:
@@ -294,15 +305,44 @@ class RHNode(ABC, FastAPI):
             self._set_task_data(task_id, QueueStatus.Cancelled, None)
         else:
             response = response[1]
+            response = self._validate_and_maybe_fix_response(response,job.directory)
             self._cleanup_output_directory(job.directory, response)
             self._cleanup_input_directory(self.get_task_data(task_id).input_directory)
             if job.save_to_cache:
                 self.cache._save_to_cache(cache_key, response, job.directory)
             self._set_task_data(task_id, QueueStatus.Finished, response)
     
+    def _validate_and_maybe_fix_response(self, response, output_dir):
+        """
+        Checks is all FilePaths are in the correct directory and changes absolute
+        filepaths to relative paths and PosixPath for consistency
+        """
+        new_d = {}
+        output_dir = Path(output_dir)
+        assert is_relative_to(output_dir, Path(self.task_directory))
+
+        for key,val in response.dict(exclude_unset=True).items():
+            if self.output_spec.__fields__[key].type_ == FilePath:
+                val = Path(val)
+
+                if is_relative_to(val, output_dir):
+                    new_d[key] = val
+
+                # Check if the path is an absolute path and lies within the .task folder
+                elif val.is_absolute() and is_relative_to(val, output_dir.absolute()):
+                    new_d[key] = val.relative_to(Path.cwd())
+                 
+                else:
+                    raise Exception(f"File path {val} is not inside the job output folder {output_dir}")
+            else:
+                new_d[key] = val
+
+        return self.output_spec(**new_d)
+
+
     def get_task_data(self, task_id):
         return self.task_status[task_id]
-    
+
     def _set_task_data(self, task_id, status, output,error=None):
         self.task_status[task_id].status = status
         self.task_status[task_id].output = output
@@ -382,9 +422,9 @@ class RHNode(ABC, FastAPI):
         node = Node(
             name=self.name,
             last_heard_from=0,
-            gpu_gb_required=self.required_gpu_memory_gb,
-            memory_required=self.required_memory_gb,            
-            cores_required=self.required_cpu_cores,
+            gpu_gb_required=self.required_gb_gpu_memory,
+            memory_required=self.required_gb_memory,            
+            cores_required=self.required_num_processes,
         )
         response = requests.post(url, json=node.dict())
         

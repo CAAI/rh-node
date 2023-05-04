@@ -8,7 +8,7 @@ RUN pip install --upgrade pip
 
 #General requirements
 RUN pip install zerodose
-#RUN python -c "from zerodose import utils; utils._maybe_download_parameters(); utils._maybe_download_mni_template()"
+RUN python -c "from zerodose import utils; utils._maybe_download_parameters(); utils._maybe_download_mni_template()"
 COPY requirements.txt .
 RUN pip install -r requirements.txt
 COPY nodes/hdbet/requirements.txt .
@@ -21,7 +21,7 @@ COPY rhnode rhnode
 COPY setup.py .
 COPY README.md .
 RUN pip install -e . --no-deps
-COPY nodes/hdbet /app
+COPY nodes/zerodose /app
 WORKDIR /app
 
 
