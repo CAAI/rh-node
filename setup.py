@@ -16,6 +16,7 @@ setup(
      long_description_content_type="text/markdown",
      url="https://github.com/CAAI/rh-node",
      packages=find_packages(),
+     include_package_data=True,
      install_requires=[
         'uvicorn',
         'requests',
