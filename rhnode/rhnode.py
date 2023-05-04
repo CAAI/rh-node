@@ -29,6 +29,7 @@ from typing import BinaryIO, Optional, Union
 from fastapi import FastAPI, File, Form, UploadFile
 from .utils import JobRequest, Node
 import traceback
+from jinja2 import Environment, FileSystemLoader
 
 
 
@@ -71,7 +72,7 @@ def create_model_no_files(cls: Type[BaseModel]) -> Type[BaseModel]:
     return create_model(cls.__name__ + "INIT", **fields)
 
 # Define a Jinja2 environment that can load templates from a package
-env = Environment(loader=PackageLoader(__name__, 'resources/templates'))
+env = Environment(loader=FileSystemLoader(os.path.dirname(__file__)+'/resources/templates'))
 templates = Jinja2Templates(directory="resources/templates")
 
 class Error(BaseModel):
