@@ -15,23 +15,18 @@ setup(
      long_description=long_description,
      long_description_content_type="text/markdown",
      url="https://github.com/CAAI/rh-node",
-     packages=find_packages(),#["rhnode"],
-    # package_dir={
-    #'rhnode': 'rhnode'},
+     packages=find_packages(),
      install_requires=[
-         'pyminc',
-         'pydicom',
-         'opencv-python',
-         'matplotlib',
-         'pandas',
-         'nipype',
-         'scikit-image',
-         'nibabel',
-         'pydantic',
-         'fastapi',
-         'jinja2'
+        'uvicorn',
+        'requests',
+        'jinja2',
+        'pydantic',
+        'fastapi',
+        'python-multipart',
      ],
      classifiers=[
          'Programming Language :: Python :: 3.8',
+         'Programming Language :: Python :: 3.9',
+         'Programming Language :: Python :: 3.10',
      ],
  )
