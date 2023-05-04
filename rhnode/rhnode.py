@@ -429,6 +429,20 @@ class RHNode(ABC, FastAPI):
         )
         response = requests.post(url, json=node.dict())
         
+    async def _register_with_manager(self):
+        success = False
+        for i in range(5):
+            print("Trying to register with manager")
+            try:
+                self.register_with_manager()
+                success = True
+                break
+            except:
+                await asyncio.sleep(2)
+        if not success:
+            print("Could not register with manager")
+        else:
+            print("Registered with manager")
 
     def setup_routes(self):
 
@@ -534,21 +548,8 @@ class RHNode(ABC, FastAPI):
         @self.on_event("startup")
         async def register_on_startup():
             multiprocessing.set_start_method('spawn')
-            await asyncio.sleep(0.5)
-            success = False
-            for i in range(5):
-                print("Trying to register with manager")
-                try:
-                    self.register_with_manager()
-                    success = True
-                    break
-                except:
-                    await asyncio.sleep(2)
-            if not success:
-                print("Could not register with manager")
-            else:
-                print("Registered with manager")
-
+            asyncio.create_task(self._register_with_manager())
+           
     @staticmethod   
     @abstractmethod
     def process(inputs, job):
