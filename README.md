@@ -93,7 +93,7 @@ Alternatively, you can add the following to your launch.json (vscode), which all
     "request": "launch",
     "module":"uvicorn",
     "console": "integratedTerminal",
-    "args": ["path.to.add:app","--port","8010"],
+    "args": ["example.add_node_project.add:app","--port","8010"],
 }
 ```
 
