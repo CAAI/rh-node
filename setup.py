@@ -15,7 +15,9 @@ setup(
      long_description=long_description,
      long_description_content_type="text/markdown",
      url="https://github.com/CAAI/rh-node",
-     packages=find_packages(),
+     #packages=find_packages(),#["rhnode"],
+    package_dir={
+    'rhnode': 'rhnode'},
      install_requires=[
         'uvicorn',
         'requests',

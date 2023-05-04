@@ -20,6 +20,8 @@ To define an RHNode, follow these steps:
 4. Define resource requirements and other configurations.
 5. Override the `process` function with your machine learning model's inference logic.
 
+
+
 Here's an example of a simple custom node called `AddNode`.
 
 `add.py`:
