@@ -1,6 +1,6 @@
 # Getting Started with RHNode Library
 
-RHNode is a library for deploying deep learning models by creating REST endpoints. In this guide, you will learn how to use the RHNode library to define your custom node, run, and test it using the NodeRunner, containerize the node using docker and deploy the model.
+RHNode is a library for deploying deep learning models by creating REST endpoints. In this guide, you will learn how to use the RHNode library to define your custom node, run, and test it using the NodeRunner, containerize the node using docker and deploy the model. See the `example` folder for the code accompanying this tutorial.
 
 ## 1 Install RHNode
 
