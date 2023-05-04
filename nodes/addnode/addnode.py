@@ -17,6 +17,10 @@ class AddNode(RHNode):
     output_spec = OutputsAdd
     name = "add"
     requires_gpu = True
+    required_gb_gpu_memory = 1
+    required_num_processes = 1
+    required_gb_memory = 1    
+
     def process(inputs, job):
         img = nib.load(inputs.in_file)
         arr = img.get_fdata() + inputs.scalar
@@ -26,4 +30,4 @@ class AddNode(RHNode):
         time.sleep(10)
         return OutputsAdd(out_file=outpath,out_message="this worked")
 
-app = AddNode(other_node_addresses={"manager": "localhost:8005"})
+app = AddNode()

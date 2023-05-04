@@ -18,6 +18,9 @@ class ZeroDoseNode(RHNode):
     input_spec = ZeroDoseInput
     output_spec = ZeroDoseOutput
     name = "zerodose"
+    required_gb_gpu_memory = 1
+    required_num_processes = 1
+    required_gb_memory = 1    
     
     def process(inputs,
                 job):
@@ -26,7 +29,7 @@ class ZeroDoseNode(RHNode):
         out_abn = job.directory / "abn.nii.gz"
 
         input_hd_bet = {"mr": inputs.mr}
-        hdbet = NodeRunner("hdbet", input_data=input_hd_bet, job=job)
+        hdbet = NodeRunner("hdbet", input_hd_bet, job)
         hdbet.start()
         hdbet_output = hdbet.wait_for_finish()
         print("RUNNING zerodose CLI")

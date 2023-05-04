@@ -6,7 +6,7 @@
 *.cache
 
 test/
-
+output/
 .vscode
 ### Python ###
 # Byte-compiled / optimized / DLL files

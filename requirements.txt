@@ -1,6 +1,14 @@
-fastapi
-pydantic
 uvicorn
 requests
 jinja2
+pyminc
+pydicom
+opencv-python
+matplotlib
+pandas
+nipype
+scikit-image
 nibabel
+pydantic
+fastapi
+python-multipart

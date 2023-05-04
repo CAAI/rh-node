@@ -6,7 +6,7 @@ from rhnode.version import __version__
 with open("README.md", "r") as fh:
     long_description = fh.read()
 
-setup(
+setup(  
      name='rhnode',
      version=__version__,
      author="Christian Hinge",

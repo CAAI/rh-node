@@ -1,31 +1,28 @@
-from rhnode import RHNode
+from rhnode import RHNode, NodeRunner
 from pydantic import BaseModel, FilePath
 import nibabel as nib
-import time
-from typing import Optional
-import asyncio
-from rhnode import NodeRunner
-from fastapi import FastAPI
-from fastapi.staticfiles import StaticFiles
 
-class TestInputs(BaseModel):
+class MyInputs(BaseModel):
     multiplier: int
-    in_file: FilePath = "/homes/hinge/Projects/rhnode/testdata/test22.nii"
+    in_file: FilePath
 
-class TestOutputs(BaseModel):
+class MyOutputs(BaseModel):
     message: str
     img1: FilePath
     img2: FilePath
 
-class TestNode(RHNode):
-    input_spec = TestInputs
-    output_spec = TestOutputs
+class MyDependantNode(RHNode):
+    input_spec = MyInputs
+    output_spec = MyOutputs
     name = "testnode"
-    requires_gpu = True
+    
+    required_gb_gpu_memory = 1
+    required_num_processes = 1
+    required_gb_memory = 1    
     
     def process(inputs, job):
-
-        add_inputs = {"scalar": 1,"in_file": inputs.in_file}        
+        
+        add_inputs = {"scalar": 1,"in_file": inputs.in_file}
         add_1_node = NodeRunner("add", add_inputs, job)
         
         add_inputs = {"scalar": 1,"in_file": inputs.in_file}
@@ -35,7 +32,7 @@ class TestNode(RHNode):
         add_1_node.start()
         add_2_node.start()
 
-        # Wait for node 1 to finish and multiply it
+        # Wait for node 1 to finish and multiply it by the multiplier constant
         outputs_1 = add_1_node.wait_for_finish()
         img = nib.load(outputs_1["out_file"])
         arr = img.get_fdata()*inputs.multiplier
@@ -43,10 +40,10 @@ class TestNode(RHNode):
         outpath = job.directory / "img1.nii.gz"
         img.to_filename(outpath)
         
-        #Wait for node 2 to finish and multiply it
+        #Wait for node 2 to finish and leave it as is
         outputs_2 = add_2_node.wait_for_finish()
         
-        return TestOutputs(message="Hello World", img1=outpath, img2=outputs_2["out_file"])
+        return MyOutputs(message="Hello World", img1=outpath, img2=outputs_2["out_file"])
     
 
-app = TestNode()
+app = MyDependantNode()

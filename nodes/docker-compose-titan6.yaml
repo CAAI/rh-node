@@ -17,10 +17,7 @@ services:
   #Queue Node
   manager:
     image: rhnode/manager:latest
-    build: 
-      context: ../
-      dockerfile: nodes/queue/Dockerfile
-
+   
     expose:
     - "8000"
 
@@ -28,33 +25,16 @@ services:
       - "traefik.http.routers.manager.rule=PathPrefix(`/manager`) || Path(`/`)"
 
     environment:
-      RH_OTHER_ADDRESSES: "peyo:9050"
-      RH_NAME: "tower"
-      RH_MEMORY: 32
-      RH_GPU_MEM: "9"
-      RH_PROCESSES: 64
-
-  ## Test node
-  testnode:
-    image: rhnode/testnode:latest
-
-    build: 
-      context: ../
-      dockerfile: nodes/testnode/Dockerfile
-
-    expose:
-      - "8000"
-    labels:
-      - "traefik.http.routers.testnode.rule=PathPrefix(`/testnode`)"
+      #RH_OTHER_ADDRESSES: ""
+      RH_NAME: "titan6"
+      RH_MEMORY: 16
+      RH_GPU_MEM: "12"
+      RH_PROCESSES: 8
 
 
   #HD BET Node
   hdbet:
     image: rhnode/hdbet:latest
-
-    build: 
-      context: ../
-      dockerfile: nodes/hdbet/Dockerfile
 
     deploy:
       resources:
@@ -68,22 +48,3 @@ services:
       
     labels:
       - "traefik.http.routers.hdbet.rule=PathPrefix(`/hdbet`)"
-    
-  #Zerodose Node
-  zerodose:
-    image: rhnode/zerodose:latest
-
-    build: 
-      context: ../
-      dockerfile: nodes/zerodose/Dockerfile
-    expose:
-      - "8000"
-    labels:
-      - "traefik.http.routers.zerodose.rule=PathPrefix(`/zerodose`)"
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
