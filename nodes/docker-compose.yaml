@@ -87,3 +87,14 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
+              
+  addnode:
+    image: rhnode/addnode:latest
+    build: 
+      context: ../
+      dockerfile: nodes/addnode/Dockerfile
+    expose:
+      - "8000"
+    labels:
+      - "traefik.http.routers.addnode.rule=PathPrefix(`/add`)"
+  

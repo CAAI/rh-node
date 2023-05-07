@@ -165,19 +165,20 @@ Step 1: Create a file in the project root named `Dockerfile`. Here is a finished
 #System
 FROM pytorch/pytorch:1.13.1-cuda11.6-cudnn8-runtime
 # FROM python:3.8 #If GPU is not necessary
-
+RUN apt-get update -y
+RUN apt-get install git -y
 
 #General requirements
 RUN pip install git+https://github.com/CAAI/rh-node.git
 
 #Unique to project requirements
-COPY . my_project_root
-RUN pip install -r my_project_root/requirements.txt
-WORKDIR /my_project_root/path/to/node
+COPY add.py /app/add.py
+COPY requirements.txt /app/requirements.txt
+RUN pip install -r /app/requirements.txt
+WORKDIR /app
 
 ## Command to start the server
 CMD ["uvicorn", "add:app", "--host", "0.0.0.0", "--port", "8000"]
-
 ```
 A few things to note:
 - For the line starting with `CMD`: The port should be kept at `8000`. Only the `"add:app"` part should be changed. 
@@ -196,8 +197,8 @@ Step 2: Build the image via a docker compose. Create a docker-compose.yaml file 
 version: "1" #Arbitrary
 services:
 
-  add: #Same name as node.name
-    image: rhnode/add:latest
+  add: #CHANGE to Same name as node.name
+    image: rhnode/add:latest #CHANGE also
     build: .
     ports:
       - "8010:8000"
@@ -304,7 +305,6 @@ services:
   #Queue Node
   manager:
     image: rhnode/manager:latest
-    build: .
 
     expose:
     - "8000"
@@ -314,18 +314,18 @@ services:
 
     environment: 
       RH_NAME: "tower" #CHANGE: peyo to the name of your host (e.g. titan6, myubuntu, caai1)
-      RH_MEMORY: 32 #CHANGE:  GB RAM on machine
-      RH_GPU_MEM: "9" #CHANGE: GB GPU on machine. If multiple GPUs, make a list like: "8,8,12"
-      RH_PROCESSES: 64 #CHANGE: The number of cores on your machine
+      RH_MEMORY: 16 #CHANGE:  GB RAM on machine
+      RH_GPU_MEM: "8" #CHANGE: GB GPU on machine. If multiple GPUs, make a list like: "8,8,12"
+      RH_PROCESSES: 4 #CHANGE: The number of cores on your machine
 
   ## Test node
-  addnode: # CHANGE: to the name of the image which mydependant node depends on
-    image: rhnode/addnode:latest #CHANGE: to the image of whichever node mydependant node depends on
+  add: # CHANGE: to the name of the image which mydependant node depends on
+    image: rhnode/add:latest #CHANGE: to the image of whichever node mydependant node depends on
 
     expose:
       - "8000"
     labels:
-      - "traefik.http.routers.testnode.rule=PathPrefix(`/addnode`)" #CHANGE: to "traefik.http.routers.[NODE_NAME].rule=PathPrefix(`/[NODE_NAME]`)
+      - "traefik.http.routers.add.rule=PathPrefix(`/add`)" #CHANGE: to "traefik.http.routers.[NODE_NAME].rule=PathPrefix(`/[NODE_NAME]`)
     deploy:
       resources:
         reservations:
@@ -343,7 +343,7 @@ services:
     expose:
       - "8000"
     labels:
-      - "traefik.http.routers.testnode.rule=PathPrefix(`/testnode`)" #CHANGE: to "traefik.http.routers.[NODE_NAME].rule=PathPrefix(`/[NODE_NAME]`)
+      - "traefik.http.routers.mydependant.rule=PathPrefix(`/mydependant`)" #CHANGE: to "traefik.http.routers.[NODE_NAME].rule=PathPrefix(`/[NODE_NAME]`)
     deploy:
       resources:
         reservations:
@@ -351,17 +351,44 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
-
 ```
 
-Lines which you might wish to change are marked with `"#CHANGE:..."`. A few new things are introduced here:
+Lines which you might wish to change are marked with `"#CHANGE:..."`.
+
+A few new things are introduced here:
 
 - All nodes now run at port `9050`
 The `manager` node keeps track of jobs running across different nodes on the host. The manager can be accessed at http://localhost:9050/manager.
 - The `reverse-proxy` container routes urls to specific container nodes. For instance all urls starting with, `/add`, will be routed to the `add`-node container. 
 - Note that there is no `build` attribute of the `add`-, `manager`-, and `reverse-proxy`-node. These containers will be pulled from Dockerhub. 
 
+Start the server (make sure you are in the folder with the correct `docker-compose.yaml`):
 
+```docker compose up --build```
+
+Test the dependant node with a script similar to that of part 4:
+
+```python
+from rhnode import NodeRunner, new_job
+
+data = {
+    "multiplier": 3,
+    "in_file": "/homes/hinge/Projects/rh-node/test/mr.nii.gz"
+}
+
+job = new_job(check_cache=False,priority=3)
+node = NodeRunner(
+    identifier="mydependant",
+    inputs = data,
+    job = job,
+)
+node.start()
+
+node.wait_for_finish()
+
+
+```
+Since we are now running a manager in our cluster, there is no need to manually assign resources to the job. 
 
 ## 7 Production
 Setup a cluster of rhnodes on a machine:
@@ -373,3 +400,11 @@ Setup a cluster of rhnodes on a machine:
     - In the manager node, define env. variable `RH_OTHER_ADDRESSES` with the adresses of other rhnode clusters. Example: RH_OTHER_ADDRESSES: `"peyo:9050,titan6:9050"`
 3. Run `docker compose up -d` (`-d` detaches the process)
 
+If you wish to stop the containers, run:
+`docker compose down`
+
+If you wish to update the containers from a newer version on Dockerhub, run:
+`docker compose pull`
+
+This can be done while the containers are running. To restart the containers do:
+`docker compose up -d`

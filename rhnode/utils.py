@@ -228,7 +228,8 @@ class NodeRunner:
                 break
             elif QueueStatus(status) == QueueStatus.Error:
                 raise Exception("The job exited with an error: "+response_json["error"]["traceback"])
-            elif QueueStatus(status) == QueueStatus.Cancelled:                raise Exception("The job was cancelled")
+            elif QueueStatus(status) == QueueStatus.Cancelled:                
+                raise Exception("The job was cancelled")
             elif QueueStatus(status) == QueueStatus.Queued:
                 time.sleep(10)
             elif QueueStatus(status) == QueueStatus.Running:

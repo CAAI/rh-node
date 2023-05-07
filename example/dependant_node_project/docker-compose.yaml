@@ -1,0 +1,65 @@
+version: "1"
+services:
+  reverse-proxy:
+    # The official v2 Traefik docker image
+    image: traefik:v2.9
+    # Enables the web UI and tells Traefik to listen to docker
+    command: --api.insecure=true --providers.docker
+    ports:
+      # The HTTP port
+      - "9050:80"
+      # The Web UI (enabled by --api.insecure=true)
+      - "9051:8080"
+    volumes:
+      # So that Traefik can listen to the Docker events
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  #Queue Node
+  manager:
+    image: rhnode/manager:latest
+
+    expose:
+    - "8000"
+
+    labels:
+      - "traefik.http.routers.manager.rule=PathPrefix(`/manager`) || Path(`/`)"
+
+    environment: 
+      RH_NAME: "tower" #CHANGE: peyo to the name of your host (e.g. titan6, myubuntu, caai1)
+      RH_MEMORY: 16 #CHANGE:  GB RAM on machine
+      RH_GPU_MEM: "8" #CHANGE: GB GPU on machine. If multiple GPUs, make a list like: "8,8,12"
+      RH_PROCESSES: 4 #CHANGE: The number of cores on your machine
+
+  ## Test node
+  add: # CHANGE: to the name of the image which mydependant node depends on
+    image: rhnode/add:latest #CHANGE: to the image of whichever node mydependant node depends on
+
+    expose:
+      - "8000"
+    labels:
+      - "traefik.http.routers.add.rule=PathPrefix(`/add`)" #CHANGE: to "traefik.http.routers.[NODE_NAME].rule=PathPrefix(`/[NODE_NAME]`)
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  ## Test node
+  mydependant: #CHANGE: to the name of your node
+    image: rhnode/mydependant:latest # CHANGE: to the image name of your node
+
+    build: .
+
+    expose:
+      - "8000"
+    labels:
+      - "traefik.http.routers.mydependant.rule=PathPrefix(`/mydependant`)" #CHANGE: to "traefik.http.routers.[NODE_NAME].rule=PathPrefix(`/[NODE_NAME]`)
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
