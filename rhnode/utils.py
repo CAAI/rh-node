@@ -76,15 +76,15 @@ class NodeRunner:
         if (port is None ) ^ (host is None):
             raise Exception("Specify both port and host or neither")
         
-        
-        if manager_adress is None:
-            options = [
-                ("manager", "8000"),
-                ("localhost", "9050"),
-            ]
-            self.manager_host, self.manager_port = self.select_manager_endpoint(options)
-        else:
-            self.manager_host, self.manager_port = manager_adress.split(":")
+        if host is None:
+            if manager_adress is None:
+                options = [
+                    ("manager", "8000"),
+                    ("localhost", "9050"),
+                ]
+                self.manager_host, self.manager_port = self.select_manager_endpoint(options)
+            else:
+                self.manager_host, self.manager_port = manager_adress.split(":")
 
 
     def is_manager_endpoint_responsive(self, host, port):
@@ -133,7 +133,7 @@ class NodeRunner:
 
         response = None
         sucess = False
-        for i in range(5):
+        for i in range(10):
             print("Trying to stop job...")
             url = f"http://{self.host}:{self.port}/{self.identifier}/get/{self.ID}"
 

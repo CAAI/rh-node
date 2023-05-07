@@ -31,7 +31,6 @@ from rhnode import RHNode
 from pydantic import BaseModel, FilePath
 import nibabel as nib
 import time
-from fastapi import FastAPI
 
 class InputsAdd(BaseModel):
     scalar: int
@@ -88,7 +87,7 @@ Alternatively, you can add the following to your launch.json (vscode), which all
 
 ```json
 {
-    "name": "addnode",
+    "name": "run_add_node",
     "type": "python",
     "request": "launch",
     "module":"uvicorn",
@@ -96,6 +95,9 @@ Alternatively, you can add the following to your launch.json (vscode), which all
     "args": ["example.add_node_project.add:app","--port","8010"],
 }
 ```
+If you get an `"[Errno 98] ... address already in use"` error, try with a different port. 
+
+Note that the node will print `Could not register with manager`, which is expected at this stage.
 
 ## 4 Testing the Node
 To test the node, you can create a separate script, `test_addnode.py`, that uses the `NodeRunner` class to send inputs and receive outputs from your custom node. Follow these steps:
@@ -156,11 +158,10 @@ The next step is to dockerize your node. First install docker via:
 3. If new to docker, this 10 min video is a very good introduction: https://www.youtube.com/watch?v=gAkwW2tuIqE&t=361s 
 
 
-Step 1: Create a file in the project root named `Dockerfile`. Here is a finished Dockerfile for addnode:
+Step 1: Create a file in the project root named `Dockerfile`. Here is a finished Dockerfile for the `add` node:
 
 
 ```Dockerfile
-
 #System
 FROM pytorch/pytorch:1.13.1-cuda11.6-cudnn8-runtime
 # FROM python:3.8 #If GPU is not necessary
@@ -175,14 +176,17 @@ RUN pip install -r my_project_root/requirements.txt
 WORKDIR /my_project_root/path/to/node
 
 ## Command to start the server
-CMD ["uvicorn", "addnode:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "add:app", "--host", "0.0.0.0", "--port", "8000"]
 
 ```
 A few things to note:
-- For the CMD: The port should be kept at 8000. Only the "addnode:app" part should be changed. 
-- The docker container will be public, so ensure that no patient data is copied to the container. 
+- For the line starting with `CMD`: The port should be kept at `8000`. Only the `"add:app"` part should be changed. 
+
+- The Docker container will later become public, so ensure that no patient data is copied to the container. When the app was previously ran via `uvicorn` (see part 3), three folders are created in the working directory `.tasks`, `.cache`, and `.inputs`. Make sure that these are not copied to the Docker container, as they may contain patient data from previous jobs.
+
 - If your model downloads weights from zenodo or similar, ensure that these are manually downloaded as a step in the Dockerfile (see RHNode hdbet node as example). Otherwise, each time the container is run, the model weights will be redownloaded.
 
+- We have created a `requirements.txt` which specifies `nibabel` as the only dependency. 
 
 Step 2: Build the image via a docker compose. Create a docker-compose.yaml file in the same directory as the Dockerfile:
 
