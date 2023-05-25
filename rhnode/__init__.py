@@ -1,12 +1,8 @@
-try:
-    from .rhnode import RHNode
-    from .utils import new_job
-    from .utils import NodeRunner
-except ImportError:
-    pass
+# try:
+from .rhnode import RHNode
+from .utils import RHJob
 
-__all__ = [
-    "RHNode",
-    "new_job",
-    "NodeRunner"
-]
+# except ImportError:
+#    pass
+
+__all__ = ["RHNode", "RHJob"]

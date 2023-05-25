@@ -19,7 +19,7 @@ services:
     image: rhnode/manager:latest
     build: 
       context: ../
-      dockerfile: nodes/queue/Dockerfile
+      dockerfile: nodes/manager/Dockerfile
 
     expose:
     - "8000"
@@ -97,4 +97,3 @@ services:
       - "8000"
     labels:
       - "traefik.http.routers.addnode.rule=PathPrefix(`/add`)"
-  

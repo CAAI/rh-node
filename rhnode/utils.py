@@ -1,91 +1,73 @@
 from pathlib import Path
 import requests
-from enum import Enum
-import uuid
-from pydantic import BaseModel, DirectoryPath
+from pydantic import BaseModel
 import time
-import os 
-from typing import Union
+import os
+from .common import *
 
-class Job(BaseModel):
-    device: Union[None, int]
-    check_cache: bool = True
-    save_to_cache: bool = True
-    priority: int = 2
-    directory: Union[None, DirectoryPath] = None
-    resources_included: bool = False
 
-class QueueStatus(Enum):
-    Preparing= -1 #Files are being uploaded
-    Initializing = 0 #The job is being initialized
-    Queued = 1 #THe job is queued
-    Running = 2 #The job is running
-    Finished = 3 #The job is finished
-    Error = 4 #The job has encountered an error
-    Cancelling = 5 #The job is being cancelled
-    Cancelled = 6 #The job has been cancelled
-
-class Node(BaseModel):
-    name: str
-    last_heard_from: float
-    gpu_gb_required: float
-    cores_required: int
-    memory_required: int
-
-class JobRequest(BaseModel):
-    job_id: str
-    priority: int
-    required_gpu_mem: int
-    required_cores: int
-    required_memory: int
-
-    
-def new_job(check_cache = True, save_to_cache = True,priority = 2):
-    job = Job(device = None,
-        check_cache = check_cache,
-        save_to_cache = save_to_cache,
-        directory=None,
-        priority = priority)
-    return job
-
-class NodeRunner:
-
-    def __init__(self, identifier, inputs, job, port = None, host=None,output_directory=None,manager_adress=None,resources_included=False):
-        self.identifier = identifier
+class RHJob:
+    def __init__(
+        self,
+        node_name,
+        inputs,
+        port=None,
+        host=None,
+        output_directory=None,
+        manager_adress=None,
+        resources_included=False,
+        included_cuda_device=None,
+        check_cache=True,
+        save_to_cache=True,
+        priority=2,
+    ):
+        self.node_identifier = node_name
         self.input_data = inputs.copy()
-        self.job = job.copy()
+        self.job = JobMetaData(
+            device=included_cuda_device,
+            check_cache=check_cache,
+            save_to_cache=save_to_cache,
+            priority=priority,
+            directory=None,
+            resources_included=resources_included,
+        )
         self.port = port
         self.ID = None
         self.host = host
         self.strict_output_dir = False
         if output_directory is None:
-            if job.directory is not None:
-                output_directory = job.directory
-            else:
-                output_directory = "."
+            output_directory = "."
         else:
-            assert job.directory is None, "Cannot specify outputdirectory when job.directory is set"
             self.strict_output_dir = True
 
-        self.job.directory = None
-        if not resources_included:
-            self.job.device = None
-        self.job.resources_included = resources_included
-
         self.output_directory = output_directory
-        if (port is None ) ^ (host is None):
+        if (port is None) ^ (host is None):
             raise Exception("Specify both port and host or neither")
-        
+
         if host is None:
             if manager_adress is None:
                 options = [
                     ("manager", "8000"),
                     ("localhost", "9050"),
                 ]
-                self.manager_host, self.manager_port = self.select_manager_endpoint(options)
+                self.manager_host, self.manager_port = self.select_manager_endpoint(
+                    options
+                )
             else:
                 self.manager_host, self.manager_port = manager_adress.split(":")
 
+    @staticmethod
+    def from_parent_job(node_name, inputs, parent_job, use_same_resources=False):
+        included_device = parent_job.device if use_same_resources else None
+        return RHJob(
+            node_name=node_name,
+            inputs=inputs,
+            check_cache=parent_job.check_cache,
+            save_to_cache=parent_job.save_to_cache,
+            priority=parent_job.priority,
+            resources_included=use_same_resources,
+            included_cuda_device=included_device,
+        )
 
     def is_manager_endpoint_responsive(self, host, port):
         try:
@@ -99,9 +81,9 @@ class NodeRunner:
 
     def select_manager_endpoint(self, options):
         for host, port in options:
-            print("Looking for manager at", ":".join([host,port]), "...")
+            print("Looking for manager at", ":".join([host, port]), "...")
             if self.is_manager_endpoint_responsive(host, port):
-                print("Manager found at", ":".join([host,port]), "...")
+                print("Manager found at", ":".join([host, port]), "...")
                 return host, port
         raise Exception("No responsive manager endpoint found in the provided options.")
 
@@ -109,14 +91,13 @@ class NodeRunner:
         host, _ = adress.split(":")
 
         if host == "localhost" and self.manager_host == "manager":
-            return self.identifier+ ":8000" 
+            return self.node_identifier + ":8000"
         elif host == "localhost":
-            return self.manager_host+":"+self.manager_port
+            return self.manager_host + ":" + self.manager_port
         else:
             return adress
 
     def _get_addr_for_job(self, node):
-
         url = f"http://{self.manager_host}:{self.manager_port}/manager/dispatcher/get_host/{node}"
         response = requests.get(url)
         response.raise_for_status()
@@ -126,8 +107,10 @@ class NodeRunner:
 
     def stop(self):
         assert self.ID is not None, "Not started"
-        print("Stopping",self.ID,"...")
-        url = f"http://{self.host}:{self.port}/{self.identifier}/remove/{self.ID}"
+        print("Stopping", self.ID, "...")
+        url = (
+            f"http://{self.host}:{self.port}/{self.node_identifier}/jobs/{self.ID}/stop"
+        )
         response = requests.post(url)
         response.raise_for_status()
 
@@ -135,12 +118,11 @@ class NodeRunner:
         sucess = False
         for i in range(10):
             print("Trying to stop job...")
-            url = f"http://{self.host}:{self.port}/{self.identifier}/get/{self.ID}"
+            url = f"http://{self.host}:{self.port}/{self.node_identifier}/jobs/{self.ID}/status"
 
             response = requests.get(url)
             response.raise_for_status()
-            response_json = response.json()
-            status = response_json["status"]
+            status = response.json()
 
             if QueueStatus(status) == QueueStatus.Cancelled:
                 sucess = True
@@ -151,17 +133,17 @@ class NodeRunner:
         if not sucess:
             raise Exception("Could not stop job")
 
-        print("Stopped",self.ID)
+        print("Stopped", self.ID)
 
     def start(self):
         assert self.ID is None, "Already started"
-        
+
         if not self.host:
-            self.host, self.port = self._get_addr_for_job(self.identifier)
+            self.host, self.port = self._get_addr_for_job(self.node_identifier)
 
         input_data = replace_paths_with_strings(self.input_data)
 
-        url = f"http://{self.host}:{self.port}/{self.identifier}/file_keys"
+        url = f"http://{self.host}:{self.port}/{self.node_identifier}/filename_keys"
         print(url)
         response = requests.get(url)
         response.raise_for_status()
@@ -176,7 +158,7 @@ class NodeRunner:
 
         ## Setup the thing
         print(input_data_not_files)
-        url = f"http://{self.host}:{self.port}/{self.identifier}/new"
+        url = f"http://{self.host}:{self.port}/{self.node_identifier}/jobs"
         print(f"Creating new job on {self.host}:{self.port}")
         response = requests.post(url, json=input_data_not_files)
         response.raise_for_status()
@@ -185,9 +167,14 @@ class NodeRunner:
         ## Upload the files
 
         for key, value in input_data_files.items():
-            url = f"http://{self.host}:{self.port}/{self.identifier}/upload/{self.ID}"
+            url = f"http://{self.host}:{self.port}/{self.node_identifier}/jobs/{self.ID}/upload"
             with open(value, "rb") as f:
-                print(f"Uploading file to {self.host}:{self.port}:", key, ":", value, )
+                print(
+                    f"Uploading file to {self.host}:{self.port}:",
+                    key,
+                    ":",
+                    value,
+                )
                 files = {"file": f}
                 data = {"key": key}
                 response = requests.post(url, files=files, data=data)
@@ -195,64 +182,67 @@ class NodeRunner:
 
         ## RUN The thing
 
-        #data = {"test": "hejsa"}
+        # data = {"test": "hejsa"}
         print(data)
         print(f"Starting job on {self.host}:{self.port} with ID:", self.ID)
-        url = f"http://{self.host}:{self.port}/{self.identifier}/start/{self.ID}"
+        url = f"http://{self.host}:{self.port}/{self.node_identifier}/jobs/{self.ID}/start"
         response = requests.post(url, json=self.job.dict())
         response.raise_for_status()
-        
-        print(self.identifier,"job submitted with ID:", self.ID, "to", self.host)
+
+        print(self.node_identifier, "job submitted with ID:", self.ID, "to", self.host)
 
     def wait_for_finish(self):
-
         assert self.ID is not None, "Not started"
         if self.strict_output_dir:
             output_path = self.output_directory
         else:
-            output_path = _create_output_directory(self.output_directory,self.identifier)
+            output_path = _create_output_directory(
+                self.output_directory, self.node_identifier
+            )
 
-        headers = {
-            "Content-Type": "application/json",
-            "Accept": "application/json"
-        }
         output = None
         while output is None:
-            url = f"http://{self.host}:{self.port}/{self.identifier}/get/{self.ID}"
+            url = f"http://{self.host}:{self.port}/{self.node_identifier}/jobs/{self.ID}/status"
 
-            response = requests.request("GET", url, headers=headers)
+            response = requests.get(url)
             response.raise_for_status()
             response_json = response.json()
-            status = response_json["status"]
+            status = response_json
             if QueueStatus(status) == QueueStatus.Finished:
-                break
+                url = f"http://{self.host}:{self.port}/{self.node_identifier}/jobs/{self.ID}/data"
+                response = requests.get(url)
+                response.raise_for_status()
+                output = response.json()
             elif QueueStatus(status) == QueueStatus.Error:
-                raise Exception("The job exited with an error: "+response_json["error"]["traceback"])
-            elif QueueStatus(status) == QueueStatus.Cancelled:                
+                raise Exception(
+                    "The job exited with an error: "
+                    + response_json["error"]["traceback"]
+                )
+            elif QueueStatus(status) == QueueStatus.Cancelled:
                 raise Exception("The job was cancelled")
             elif QueueStatus(status) == QueueStatus.Queued:
                 time.sleep(10)
             elif QueueStatus(status) == QueueStatus.Running:
                 time.sleep(4)
 
-        url = f"http://{self.host}:{self.port}/{self.identifier}/get2/{self.ID}"
-        response = requests.request("GET", url, headers=headers)
-        response.raise_for_status()
-        output = response.json()
         for key, value in output.items():
             if isinstance(value, str):
-                if value.startswith(f"/{self.identifier}/download/"):
+                if "/download/" in value:
                     print("Downloading", key, "...")
-                    url = f"http://{self.host}:{self.port}/{self.identifier}/download/{self.ID}/{key}"
+                    url = f"http://{self.host}:{self.port}/{self.node_identifier}/jobs/{self.ID}/download/{key}"
 
                     response = requests.get(url)
                     response.raise_for_status()
-                    fname = response.headers['Content-Disposition'].split('=')[1].replace('"','')
-                    fname = Path(os.path.join(output_path,fname)).absolute()
-                    with open(fname, 'wb') as f:
+                    fname = (
+                        response.headers["Content-Disposition"]
+                        .split("=")[1]
+                        .replace('"', "")
+                    )
+                    fname = Path(os.path.join(output_path, fname)).absolute()
+                    with open(fname, "wb") as f:
                         f.write(response.content)
                     output[key] = fname
-        
+
         return output
 
 
@@ -261,7 +251,7 @@ def replace_paths_with_strings(inp):
         inp = inp.dict()
     for key, val in inp.items():
         if isinstance(val, Path):
-            inp[key] =  str(val)
+            inp[key] = str(val)
         else:
             inp[key] = val
     return inp
