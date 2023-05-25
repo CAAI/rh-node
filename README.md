@@ -99,6 +99,8 @@ If you get an `"[Errno 98] ... address already in use"` error, try with a differ
 
 Note that the node will print `Could not register with manager`, which is expected at this stage.
 
+The rhnode server now runs, and is accessible from the webbrowser on http://localhost:8010/add.
+
 ## 4 Testing the Node
 To test the node, you can create a separate script, `test_addnode.py`, that uses the `NodeRunner` class to send inputs and receive outputs from your custom node. Follow these steps:
 
