@@ -1,10 +1,14 @@
+See the [contributing section](/docs/contributing.md) for steps, if you wish to make changes to the core of RHNode. 
+
+See [rh-library](https://github.com/CAAI/rh-library) for nodes in production. 
+
 # Getting Started with RHNode Library
 
 RHNode is a library for deploying deep learning models by creating REST endpoints. In this guide, you will learn how to use the RHNode library to define your custom node, run, and test it using the NodeRunner, containerize the node using docker and deploy the model. See the `example` folder for the code accompanying this tutorial.
 
 ## 1 Install RHNode
 
-Install the RHNode library using `pip`. You can install it directly from the GitHub repository by running the following command:
+Install the RHNode library using `pip`from the GitHub repository:
 
 ```cmd
 pip install git+https://github.com/CAAI/rh-node.git
@@ -14,12 +18,11 @@ pip install git+https://github.com/CAAI/rh-node.git
 
 To define an RHNode, follow these steps:
 
-1. Import the required libraries and classes for your model.
+1. In a new file, import the specific classes/functions for your machine learning model.
 2. Define input and output specifications using Pydantic BaseModel.
 3. Create a custom class for your node that inherits from `RHNode`.
 4. Define resource requirements and other configurations.
 5. Override the `process` function with your machine learning model's inference logic.
-
 
 
 Here's an example of a simple custom node called `AddNode`.
@@ -32,20 +35,23 @@ from pydantic import BaseModel, FilePath
 import nibabel as nib
 import time
 
+
 class InputsAdd(BaseModel):
     scalar: int
     in_file: FilePath
 
+
 class OutputsAdd(BaseModel):
     out_file: FilePath
     out_message: str
+
 
 class AddNode(RHNode):
     input_spec = InputsAdd
     output_spec = OutputsAdd
     name = "add"
     required_gb_gpu_memory = 1
-    required_num_processes = 1
+    required_num_threads = 1
     required_gb_memory = 1
 
     def process(inputs, job):
@@ -54,8 +60,9 @@ class AddNode(RHNode):
         img = nib.Nifti1Image(arr, img.affine, img.header)
         outpath = job.directory / "added.nii.gz"
         img.to_filename(outpath)
-        time.sleep(10)
+        time.sleep(3)
         return OutputsAdd(out_file=outpath, out_message="this worked")
+
 
 app = AddNode()
 ```
@@ -67,13 +74,13 @@ The following fields should be defined:
 
 - `name`: A unique name used to identify the node.
 - `required_gb_gpu_memory`: 
-- `required_num_processes`:
+- `required_num_threads`:
 - `required_gb_memory`:
 
 
-The `process` function accepts two arguments: an instance of `input_spec` and a `job` instance. 
+The `process` function accepts two arguments: an instance of `input_spec` and a `job` metadata instance. 
 
-The job instance contains two important attributes; `job.device` and `job.directory`. If `required_gb_gpu_memory>0`, then a CUDA device will be reserved and given to the process via `job.device` (an integer). All cuda devices are visible to the `process` function, so it is important that all GPU operations are performed only on the designated `job.device` as not to interfere with the memory of other jobs. The `job.directory` attribute specifies a folder in which all file outputs of the process function are expected to be saved. 
+The job metadata contains two important attributes; `job.device` and `job.directory`. If `required_gb_gpu_memory>0`, then a CUDA device will be reserved and given to the process via `job.device` (an integer). All cuda devices are visible to the `process` function, so it is important that all GPU operations are performed only on the designated `job.device` as not to interfere with the memory of other jobs. The `job.directory` attribute specifies a folder in which all file outputs of the process function are expected to be saved. 
 
 Also, if your `process` function makes calls to other nodes (see later section), the same `job` instance should be passed on to these. Among other things, this is to ensure that such child jobs will have the same job priority as the parent job. 
 
@@ -102,50 +109,48 @@ Note that the node will print `Could not register with manager`, which is expect
 The rhnode server now runs, and is accessible from the webbrowser on http://localhost:8010/add.
 
 ## 4 Testing the Node
-To test the node, you can create a separate script, `test_addnode.py`, that uses the `NodeRunner` class to send inputs and receive outputs from your custom node. Follow these steps:
+To test the node, you can create a separate script, `test_addnode.py`, that uses the `RHJob` class to send inputs and receive outputs from your custom node. Follow these steps:
 
 1. Import the required classes and functions.
 2. Define the inputs to the node you wish to run.
-3. Define the job parameters (priority, whether to check cache).
-4. Start the node with `NodeRunner`.
+3. Define the job parameters (priority, whether to check cache) in `RHJob`.
+4. Start the node.
 5. Either wait for the node to finish or stop the node.
 
 Here's an example of how to invoke the `AddNode`:
 
 ```python
-from rhnode import NodeRunner, new_job
+from rhnode import RHJob
 
-# Define the inputs to the node you wish to run
+# NOTE: manager_adress and node_address are mutually exclusive.
+
 data = {
     "scalar": 3,
-    "in_file": "/homes/hinge/Projects/rh-node/test/mr.nii.gz"
+    "in_file": "/homes/hinge/Projects/rh-node/tests/data/mr.nii.gz",
 }
 
-# Define the job parameters (priority, whether to check cache)
-job = new_job(check_cache=False)
-job.device=0
-
-# Start the node with NodeRunner
-node = NodeRunner(
-    identifier="add",
-    host = "localhost",
-    port = 8010,
+node = RHJob(
+    node_name="add",
     inputs=data,
-    job=job,
-    resources_included=True
+    node_address="localhost:8010",
+    output_directory=".",
+    resources_included=True,
+    included_cuda_device=0,  # if applicable
+    priority=3,
+    check_cache=False,
 )
+# Wait for the node to finish
 node.start()
 
-# Wait for the node to finish
 output = node.wait_for_finish()
 
-# Alternatively, to interrupt the job:
+# Alternatively to interrupt the job:
 # node.stop()
 ```
 A few things to note in this example:
 - By default when running a node, the result is saved in a cache. If the node is invoked again with the same inputs, then the cached result will be returned immediately. `check_cache=False` turns off this functionality, which might be benifical for debugging purposes. 
 - Usually, the host and port of the node should not be specified explicitly. In production, the NodeRunner will ask a "manager" node where to find the add-node. 
-- `resources_included=True` is likewise included for debugging purposes. By default,  any node run will ask a manager node to allocate resources for it via a queue. However, there is no manager node during debugging. `resources_included=True` lets the node know that resources have already been allocated. We then specify the GPU device id manually by `job.device=0`. Again this is just for debugging purposes
+- `resources_included=True` is likewise included for debugging purposes. By default,  any node run will ask a manager node to allocate resources for it via a queue. However, there is no manager node during debugging. `resources_included=True` lets the node know that resources have already been allocated. We then specify the GPU device id manually by `included_cuda_device=0`. Again this is just for debugging purposes
 
 
 That's it! You've learned how to define and use your custom node with the RHNode library.
@@ -186,7 +191,7 @@ CMD ["uvicorn", "add:app", "--host", "0.0.0.0", "--port", "8000"]
 A few things to note:
 - For the line starting with `CMD`: The port should be kept at `8000`. Only the `"add:app"` part should be changed. 
 
-- The Docker container will later become public, so ensure that no patient data is copied to the container. When the app was previously ran via `uvicorn` (see part 3), three folders are created in the working directory `.tasks`, `.cache`, and `.inputs`. Make sure that these are not copied to the Docker container, as they may contain patient data from previous jobs.
+- The Docker container will later become public, so ensure that no patient data is copied to the container. When the app was previously ran via `uvicorn` (see part 3), three folders are created in the working directory `.outputs`, `.cache`, and `.inputs`. Make sure that these are not copied to the Docker container, as they may contain patient data from previous jobs.
 
 - If your model downloads weights from zenodo or similar, ensure that these are manually downloaded as a step in the Dockerfile (see RHNode hdbet node as example). Otherwise, each time the container is run, the model weights will be redownloaded.
 
@@ -237,36 +242,38 @@ The image will be saved according to the image attribute in the docker-compose f
 If your node uses NodeRunner to run other nodes as a step in the process function, then those nodes should also be running during development. Here is an example node that depends on the previously defined add node. 
 
 ```python
-from rhnode import RHNode, NodeRunner
+from rhnode import RHNode, RHJob
 from pydantic import BaseModel, FilePath
 import nibabel as nib
+
 
 class MyInputs(BaseModel):
     multiplier: int
     in_file: FilePath
+
 
 class MyOutputs(BaseModel):
     message: str
     img1: FilePath
     img2: FilePath
 
-class MyDependantNode(RHNode):
+
+class MyDependentNode(RHNode):
     input_spec = MyInputs
     output_spec = MyOutputs
-    name = "mydependant"
-    
+    name = "mydependent"
+
     required_gb_gpu_memory = 1
-    required_num_processes = 1
-    required_gb_memory = 1    
-    
+    required_num_threads = 1
+    required_gb_memory = 1
+
     def process(inputs, job):
-        
-        add_inputs = {"scalar": 1,"in_file": inputs.in_file}
-        add_1_node = NodeRunner("add", add_inputs, job)
-        
-        add_inputs = {"scalar": 1,"in_file": inputs.in_file}
-        add_2_node = NodeRunner("add", add_inputs, job)
-        
+        add_inputs = {"scalar": 1, "in_file": inputs.in_file}
+        add_1_node = RHJob.from_parent_job("add", add_inputs, job)
+
+        add_inputs = {"scalar": 1, "in_file": inputs.in_file}
+        add_2_node = RHJob.from_parent_job("add", add_inputs, job)
+
         # Start nodes in parallel
         add_1_node.start()
         add_2_node.start()
@@ -274,20 +281,22 @@ class MyDependantNode(RHNode):
         # Wait for node 1 to finish and multiply it by the multiplier constant
         outputs_1 = add_1_node.wait_for_finish()
         img = nib.load(outputs_1["out_file"])
-        arr = img.get_fdata()*inputs.multiplier
+        arr = img.get_fdata() * inputs.multiplier
         img = nib.Nifti1Image(arr, img.affine, img.header)
         outpath = job.directory / "img1.nii.gz"
         img.to_filename(outpath)
-        
-        #Wait for node 2 to finish and leave it as is
-        outputs_2 = add_2_node.wait_for_finish()
-        
-        return MyOutputs(message="Hello World", img1=outpath, img2=outputs_2["out_file"])
-    
 
-app = MyDependantNode()
+        # Wait for node 2 to finish and leave it as is
+        outputs_2 = add_2_node.wait_for_finish()
+
+        return MyOutputs(
+            message="Hello World", img1=outpath, img2=outputs_2["out_file"]
+        )
+
+
+app = MyDependentNode()
 ```
-Create a `Dockerfile` for MyDependantNode similar to before.
+Create a `Dockerfile` for MyDependentNode similar to before.
 Now create a `docker-compose.yaml` in the same folder as the `Dockerfile`:
 
 
@@ -322,11 +331,11 @@ services:
       RH_NAME: "tower" #CHANGE: peyo to the name of your host (e.g. titan6, myubuntu, caai1)
       RH_MEMORY: 16 #CHANGE:  GB RAM on machine
       RH_GPU_MEM: "8" #CHANGE: GB GPU on machine. If multiple GPUs, make a list like: "8,8,12"
-      RH_PROCESSES: 4 #CHANGE: The number of cores on your machine
+      RH_NUM_THREADS: 4 #CHANGE: The number of threads on your machine
 
   ## Test node
-  add: # CHANGE: to the name of the image which mydependant node depends on
-    image: rhnode/add:latest #CHANGE: to the image of whichever node mydependant node depends on
+  add: # CHANGE: to the name of the image which mydependent node depends on
+    image: rhnode/add:latest #CHANGE: to the image of whichever node mydependent node depends on
 
     expose:
       - "8000"
@@ -341,15 +350,15 @@ services:
               capabilities: [gpu]
 
   ## Test node
-  mydependant: #CHANGE: to the name of your node
-    image: rhnode/mydependant:latest # CHANGE: to the image name of your node
+  mydependent: #CHANGE: to the name of your node
+    image: rhnode/mydependent:latest # CHANGE: to the image name of your node
 
     build: .
 
     expose:
       - "8000"
     labels:
-      - "traefik.http.routers.mydependant.rule=PathPrefix(`/mydependant`)" #CHANGE: to "traefik.http.routers.[NODE_NAME].rule=PathPrefix(`/[NODE_NAME]`)
+      - "traefik.http.routers.mydependent.rule=PathPrefix(`/mydependent`)" #CHANGE: to "traefik.http.routers.[NODE_NAME].rule=PathPrefix(`/[NODE_NAME]`)
     deploy:
       resources:
         reservations:
@@ -372,26 +381,23 @@ Start the server (make sure you are in the folder with the correct `docker-compo
 
 ```docker compose up --build```
 
-Test the dependant node with a script similar to that of part 4:
+Test the dependent node with a script similar to that of part 4:
 
 ```python
-from rhnode import NodeRunner, new_job
+from rhnode import RHJob
 
-data = {
-    "multiplier": 3,
-    "in_file": "/homes/hinge/Projects/rh-node/test/mr.nii.gz"
-}
+data = {"multiplier": 3, "in_file": "/homes/hinge/Projects/rh-node/test/mr.nii.gz"}
 
-job = new_job(check_cache=False,priority=3)
-node = NodeRunner(
-    identifier="mydependant",
-    inputs = data,
-    job = job,
+job = RHJob(
+    node_name="dependent",
+    inputs=data,
+    output_directory=".",
+    priority=3,
+    check_cache=False,
 )
-node.start()
 
-node.wait_for_finish()
-
+job.start()
+job.wait_for_finish()
 
 ```
 Since we are now running a manager in our cluster, there is no need to manually assign resources to the job. 
@@ -402,7 +408,7 @@ Setup a cluster of rhnodes on a machine:
 2. Copy the `docker-compose.yaml` file from part 6 to the machine, and change relevant fields:
     - Add the nodes you wish to have running on the machine (make sure that they have been pushed to Dockerhub).
     - Delete the `build` attribute of each node. 
-    - In the manager node, change env. variables `RH_NAME`, `RH_MEMORY`, `RH_GPU_MEM`, and `RH_PROCESSES`
+    - In the manager node, change env. variables `RH_NAME`, `RH_MEMORY`, `RH_GPU_MEM`, and `RH_NUM_THREADS`
     - In the manager node, define env. variable `RH_OTHER_ADDRESSES` with the adresses of other rhnode clusters. Example: RH_OTHER_ADDRESSES: `"peyo:9050,titan6:9050"`
 3. Run `docker compose up -d` (`-d` detaches the process)
 

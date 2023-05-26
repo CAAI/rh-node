@@ -1,0 +1,60 @@
+version: "1"
+services:
+  reverse-proxy:
+    # The official v2 Traefik docker image
+    image: traefik:v2.9
+    # Enables the web UI and tells Traefik to listen to docker
+    command: --api.insecure=true --providers.docker
+    ports:
+      # The HTTP port
+      - "9050:80"
+      # The Web UI (enabled by --api.insecure=true)
+      - "9051:8080"
+    volumes:
+      # So that Traefik can listen to the Docker events
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  #Queue Node
+  manager:
+    image: rhnode/manager:latest
+    build: 
+      context: ../
+      dockerfile: nodes/manager/Dockerfile
+
+    expose:
+    - "8000"
+
+    labels:
+      - "traefik.http.routers.manager.rule=PathPrefix(`/manager`) || Path(`/`)"
+
+    environment:
+      RH_OTHER_ADDRESSES: ""
+      RH_NAME: "tower"
+      RH_MEMORY: 12
+      RH_GPU_MEM: "8"
+      RH_NUM_THREADS: 12
+
+  ## Testnode: Dependent
+  dependent:
+    image: rhnode/dependent:latest
+
+    build: 
+      context: ../
+      dockerfile: tests/nodes/testnode_dependent/Dockerfile
+
+    expose:
+      - "8000"
+    labels:
+      - "traefik.http.routers.dependent.rule=PathPrefix(`/dependent`)"
+
+  ## Testnode: Add     
+  add:
+    image: rhnode/add:latest
+    build: 
+      context: ../
+      dockerfile: tests/nodes/testnode_add/Dockerfile
+    expose:
+      - "8000"
+    labels:
+      - "traefik.http.routers.add.rule=PathPrefix(`/add`)"
+      

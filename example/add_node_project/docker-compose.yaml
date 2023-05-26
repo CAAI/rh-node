@@ -6,7 +6,7 @@ services:
     image: rhnode/add:latest
     build: .
     ports:
-      - "8010:8000"
+      - "8030:8000"
     deploy:
       resources:
         reservations:

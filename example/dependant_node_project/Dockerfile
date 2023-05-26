@@ -9,9 +9,9 @@ RUN pip install git+https://github.com/CAAI/rh-node.git
 
 #Unique to project requirements
 COPY requirements.txt /app/requirements.txt
-COPY mydependant.py /app/mydependant.py
+COPY mydependent.py /app/mydependent.py
 RUN pip install -r /app/requirements.txt
 WORKDIR /app
 
 ## Command to start the server
-CMD ["uvicorn", "mydependant:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "mydependent:app", "--host", "0.0.0.0", "--port", "8000"]
