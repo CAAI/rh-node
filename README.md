@@ -171,6 +171,7 @@ RUN apt-get update -y
 RUN apt-get install git -y
 
 #General requirements
+ADD https://api.github.com/repos/CAAI/rh-node/git/refs/heads/main version_rhnode.json
 RUN pip install git+https://github.com/CAAI/rh-node.git
 
 #Unique to project requirements
@@ -189,8 +190,8 @@ A few things to note:
 
 - If your model downloads weights from zenodo or similar, ensure that these are manually downloaded as a step in the Dockerfile (see RHNode hdbet node as example). Otherwise, each time the container is run, the model weights will be redownloaded.
 
-- If your model installs from a github repo via git clone and you wish to ensure the newest version is cloned (rather than caching from the last build) replace the `RUN git clone https://github.com/$USER/$REPO` line with: 
-`ADD https://api.github.com/repos/$USER/$REPO/git/refs/heads/$BRANCH version.json` and `RUN git clone -b $BRANCH https://github.com/$USER/$REPO`.
+- If your model installs from a github repo and you wish to ensure the newest version is used (rather than caching from the last build) replace the `RUN git clone https://github.com/$USER/$REPO` line with: 
+`ADD https://api.github.com/repos/$USER/$REPO/git/refs/heads/$BRANCH version.json` and `RUN git clone -b $BRANCH https://github.com/$USER/$REPO` or similar for `RUN pip install` as above.
 
 - We have created a `requirements.txt` which specifies `nibabel` as the only dependency. 
 
