@@ -14,6 +14,10 @@ import time
 
 
 class RHProcess:
+    """Each "job" corresponds to one instance of this class.
+    This class is responsible for running the process function of the node,
+    communicating with the resource queue, and handling IO"""
+
     def __init__(
         self,
         output_directory,
@@ -54,6 +58,7 @@ class RHProcess:
 
         self._make_input_directory()
 
+    ## IO
     def _cleanup_output_directory(self, response):
         out_files = []
         for key, val in response.dict(exclude_unset=True).items():
