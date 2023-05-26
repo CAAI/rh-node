@@ -106,6 +106,8 @@ If you get an `"[Errno 98] ... address already in use"` error, try with a differ
 
 Note that the node will print `Could not register with manager`, which is expected at this stage.
 
+The rhnode server now runs, and is accessible from the webbrowser on http://localhost:8010/add.
+
 ## 4 Testing the Node
 To test the node, you can create a separate script, `test_addnode.py`, that uses the `RHJob` class to send inputs and receive outputs from your custom node. Follow these steps:
 
@@ -174,6 +176,7 @@ RUN apt-get update -y
 RUN apt-get install git -y
 
 #General requirements
+ADD https://api.github.com/repos/CAAI/rh-node/git/refs/heads/main version_rhnode.json
 RUN pip install git+https://github.com/CAAI/rh-node.git
 
 #Unique to project requirements
@@ -191,6 +194,9 @@ A few things to note:
 - The Docker container will later become public, so ensure that no patient data is copied to the container. When the app was previously ran via `uvicorn` (see part 3), three folders are created in the working directory `.outputs`, `.cache`, and `.inputs`. Make sure that these are not copied to the Docker container, as they may contain patient data from previous jobs.
 
 - If your model downloads weights from zenodo or similar, ensure that these are manually downloaded as a step in the Dockerfile (see RHNode hdbet node as example). Otherwise, each time the container is run, the model weights will be redownloaded.
+
+- If your model installs from a github repo and you wish to ensure the newest version is used (rather than caching from the last build) replace the `RUN git clone https://github.com/$USER/$REPO` line with: 
+`ADD https://api.github.com/repos/$USER/$REPO/git/refs/heads/$BRANCH version.json` and `RUN git clone -b $BRANCH https://github.com/$USER/$REPO` or similar for `RUN pip install` as above.
 
 - We have created a `requirements.txt` which specifies `nibabel` as the only dependency. 
 
