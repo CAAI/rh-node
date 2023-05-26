@@ -25,6 +25,7 @@ setup(
         "fastapi",
         "python-multipart",
         "fastapi-utils",
+        "python-dotenv",
     ],
     classifiers=[
         "Programming Language :: Python :: 3.8",

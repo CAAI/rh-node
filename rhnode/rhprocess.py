@@ -5,7 +5,7 @@ from pathlib import Path
 import requests
 import asyncio
 from contextlib import asynccontextmanager
-from .utils import QueueStatus, JobRequest
+from .rhjob import JobStatus, QueueRequest
 from multiprocessing import Process
 import traceback
 from .common import *
@@ -13,14 +13,14 @@ from contextlib import contextmanager
 import time
 
 
-class Job:
+class RHProcess:
     def __init__(
         self,
         output_directory,
         input_directory,
         inputs_no_files,
         required_gb_gpu_memory,
-        required_num_processes,
+        required_num_threads,
         required_gb_memory,
         ID,
         input_spec,
@@ -32,7 +32,7 @@ class Job:
     ):
         self.target_function = target_function
         self.status = None
-        self.error_msg = None
+        self.error = None
         self.time_created = time.time()
         self.time_last_accessed = None
         self.output = None
@@ -41,7 +41,7 @@ class Job:
         self.output_directory = output_directory
         self.input_directory = input_directory
         self.required_gb_gpu_memory = required_gb_gpu_memory
-        self.required_num_processes = required_num_processes
+        self.required_num_threads = required_num_threads
         self.required_gb_memory = required_gb_memory
         self.manager_endpoint = manager_endpoint
         self.ID = ID
@@ -50,7 +50,7 @@ class Job:
         self.input_spec_optional_file = create_relaxed_filepath_model(self.input_spec)
         self.cache = cache
         self.name = name
-        self.status = QueueStatus.Preparing
+        self.status = JobStatus.Preparing
 
         self._make_input_directory()
 
@@ -107,11 +107,11 @@ class Job:
     def _queue(self, job):
         url = self.manager_endpoint + f"/add_job"
         queue_id = self.name + "_" + self.ID
-        jobreq = JobRequest(
+        jobreq = QueueRequest(
             job_id=queue_id,
             priority=job.priority,
             required_gpu_mem=self.required_gb_gpu_memory,
-            required_cores=self.required_num_processes,
+            required_threads=self.required_num_threads,
             required_memory=self.required_gb_memory,
         )
         response = requests.post(url, json=jobreq.dict())
@@ -141,8 +141,8 @@ class Job:
                     break
                 ## If the task is cancelled yield None
                 ## THe run function will check for the status and not spawn the process
-                if self.status == QueueStatus.Cancelling:
-                    self.status = QueueStatus.Cancelled
+                if self.status == JobStatus.Cancelling:
+                    self.status = JobStatus.Cancelled
                     gpu_id = None
                     break
 
@@ -184,12 +184,12 @@ class Job:
 
     ## JOB RUNNING
     async def run(self, job):
-        assert self.status == QueueStatus.Preparing
+        assert self.status == JobStatus.Preparing
         self.input = self.input_spec(**self.input.dict())
 
         ## Cancel signal might come before the run function is called executes
-        if self.status == QueueStatus.Cancelling:
-            self.statis = QueueStatus.Cancelled
+        if self.status == JobStatus.Cancelling:
+            self.statis = JobStatus.Cancelled
             return
 
         new_dir = self._make_job_directory()
@@ -198,26 +198,26 @@ class Job:
 
         if job.check_cache and self.cache._result_is_cached(cache_key):
             response = self.cache._load_from_cache(cache_key, job.directory)
-            self.status = QueueStatus.Finished
+            self.status = JobStatus.Finished
             self.output = response
             return
 
-        self.status = QueueStatus.Queued
+        self.status = JobStatus.Queued
 
         async with self._maybe_wait_for_resources(job) as cuda_device:
             ## Cancel signal might come in waiting for cuda queue
-            if self.status == QueueStatus.Cancelled:
+            if self.status == JobStatus.Cancelled:
                 return
 
             # Check cache again just for good measures
             if job.check_cache and self.cache._result_is_cached(cache_key):
                 response = self.cache._load_from_cache(cache_key, job.directory)
-                self.status = QueueStatus.Finished
+                self.status = JobStatus.Finished
                 self.output = response
                 return
 
             job.device = cuda_device
-            self.status = QueueStatus.Running
+            self.status = JobStatus.Running
             result_queue = multiprocessing.Queue()
             p = Process(
                 target=self.target_function,
@@ -225,7 +225,7 @@ class Job:
             )
             p.start()
             while p.is_alive():
-                if self.status == QueueStatus.Cancelling:
+                if self.status == JobStatus.Cancelling:
                     p.terminate()
                     while p.is_alive():
                         print("Waiting for process to terminate...")
@@ -240,12 +240,12 @@ class Job:
             error_type = response[2]
             print(f"The Process ended with an error: {error_message}")
 
-            self.status = QueueStatus.Error
-            self.error_msg = Error(traceback=error_message, error=error_type)
+            self.status = JobStatus.Error
+            self.error = Error(traceback=error_message, error=error_type)
 
         elif response[0] == "cancelled":
             print(f"The Process was cancelled")
-            self.status = QueueStatus.Cancelled
+            self.status = JobStatus.Cancelled
         else:
             response = response[1]
             response = self._validate_and_maybe_fix_response(response)
@@ -253,7 +253,7 @@ class Job:
             self._remove_input_directory()
             if job.save_to_cache:
                 self.cache._save_to_cache(cache_key, response, job.directory)
-            self.status = QueueStatus.Finished
+            self.status = JobStatus.Finished
             self.output = response
 
     @contextmanager
@@ -270,13 +270,13 @@ class Job:
 
     def stop(self):
         if self.status in [
-            QueueStatus.Finished,
-            QueueStatus.Cancelled,
-            QueueStatus.Error,
-            QueueStatus.Cancelling,
+            JobStatus.Finished,
+            JobStatus.Cancelled,
+            JobStatus.Error,
+            JobStatus.Cancelling,
         ]:
             raise Exception(
                 "Task cannot be cancelled when it has status: ",
                 self.status,
             )
-        self.status = QueueStatus.Cancelling
+        self.status = JobStatus.Cancelling

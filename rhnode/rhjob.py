@@ -6,15 +6,29 @@ import os
 from .common import *
 
 
+# -output directory
+# -n --node_address
+# -m --manager_address
+# -o --output
+# -p --priority
+# -nc --no_cache
+# -ns --no_save
+# -r --resources_included
+# -g --gpu
+
+# NodeName
+
+# NodeInput
+
+
 class RHJob:
     def __init__(
         self,
         node_name,
         inputs,
-        port=None,
-        host=None,
         output_directory=None,
-        manager_adress=None,
+        node_address=None,
+        manager_address=None,
         resources_included=False,
         included_cuda_device=None,
         check_cache=True,
@@ -31,9 +45,13 @@ class RHJob:
             directory=None,
             resources_included=resources_included,
         )
-        self.port = port
+        if node_address is not None:
+            self.host, self.port = node_address.split(":")
+        else:
+            self.host = None
+            self.port = None
+
         self.ID = None
-        self.host = host
         self.strict_output_dir = False
         if output_directory is None:
             output_directory = "."
@@ -41,11 +59,11 @@ class RHJob:
             self.strict_output_dir = True
 
         self.output_directory = output_directory
-        if (port is None) ^ (host is None):
+        if (self.port is None) ^ (self.host is None):
             raise Exception("Specify both port and host or neither")
 
-        if host is None:
-            if manager_adress is None:
+        if self.host is None:
+            if manager_address is None:
                 options = [
                     ("manager", "8000"),
                     ("localhost", "9050"),
@@ -54,20 +72,29 @@ class RHJob:
                     options
                 )
             else:
-                self.manager_host, self.manager_port = manager_adress.split(":")
+                self.manager_host, self.manager_port = manager_address.split(":")
 
     @staticmethod
     def from_parent_job(node_name, inputs, parent_job, use_same_resources=False):
-        included_device = parent_job.device if use_same_resources else None
+        included_device = (
+            parent_job.device
+            if use_same_resources or parent_job.resources_included
+            else None
+        )
         return RHJob(
             node_name=node_name,
             inputs=inputs,
             check_cache=parent_job.check_cache,
             save_to_cache=parent_job.save_to_cache,
             priority=parent_job.priority,
-            resources_included=use_same_resources,
+            resources_included=parent_job.resources_included or use_same_resources,
             included_cuda_device=included_device,
+            output_directory=_create_output_directory(parent_job.directory, node_name),
         )
+
+    def _maybe_make_output_directory(self, output_directory):
+        if not os.path.exists(output_directory):
+            os.makedirs(output_directory)
 
     def is_manager_endpoint_responsive(self, host, port):
         try:
@@ -124,7 +151,7 @@ class RHJob:
             response.raise_for_status()
             status = response.json()
 
-            if QueueStatus(status) == QueueStatus.Cancelled:
+            if JobStatus(status) == JobStatus.Cancelled:
                 sucess = True
                 break
 
@@ -191,10 +218,20 @@ class RHJob:
 
         print(self.node_identifier, "job submitted with ID:", self.ID, "to", self.host)
 
+    def _get_status(self):
+        url = f"http://{self.host}:{self.port}/{self.node_identifier}/jobs/{self.ID}/status"
+
+        response = requests.get(url)
+        response.raise_for_status()
+        response_json = response.json()
+        status = response_json
+        return status
+
     def wait_for_finish(self):
         assert self.ID is not None, "Not started"
         if self.strict_output_dir:
             output_path = self.output_directory
+            self._maybe_make_output_directory(output_path)
         else:
             output_path = _create_output_directory(
                 self.output_directory, self.node_identifier
@@ -202,27 +239,27 @@ class RHJob:
 
         output = None
         while output is None:
-            url = f"http://{self.host}:{self.port}/{self.node_identifier}/jobs/{self.ID}/status"
-
-            response = requests.get(url)
-            response.raise_for_status()
-            response_json = response.json()
-            status = response_json
-            if QueueStatus(status) == QueueStatus.Finished:
+            status = self._get_status()
+            if JobStatus(status) == JobStatus.Finished:
                 url = f"http://{self.host}:{self.port}/{self.node_identifier}/jobs/{self.ID}/data"
                 response = requests.get(url)
                 response.raise_for_status()
                 output = response.json()
-            elif QueueStatus(status) == QueueStatus.Error:
-                raise Exception(
+            elif JobStatus(status) == JobStatus.Error:
+                url = f"http://{self.host}:{self.port}/{self.node_identifier}/jobs/{self.ID}/error"
+                response = requests.get(url)
+                response.raise_for_status()
+                response_json = response.json()
+                raise JobFailedError(
                     "The job exited with an error: "
-                    + response_json["error"]["traceback"]
+                    + response_json["error"]
+                    + response_json["traceback"]
                 )
-            elif QueueStatus(status) == QueueStatus.Cancelled:
-                raise Exception("The job was cancelled")
-            elif QueueStatus(status) == QueueStatus.Queued:
+            elif JobStatus(status) == JobStatus.Cancelled:
+                raise JobCancelledError("The job was cancelled")
+            elif JobStatus(status) == JobStatus.Queued:
                 time.sleep(10)
-            elif QueueStatus(status) == QueueStatus.Running:
+            elif JobStatus(status) == JobStatus.Running:
                 time.sleep(4)
 
         for key, value in output.items():
@@ -257,7 +294,7 @@ def replace_paths_with_strings(inp):
     return inp
 
 
-def _create_output_directory(base_directory, node_name):
+def _create_output_directory_name(base_directory, node_name):
     directory = os.path.join(base_directory, node_name)
     i = 1
     while True:
@@ -265,5 +302,10 @@ def _create_output_directory(base_directory, node_name):
             break
         directory = os.path.join(base_directory, node_name + "_" + str(i))
         i += 1
+    return directory
+
+
+def _create_output_directory(base_directory, node_name):
+    directory = _create_output_directory_name(base_directory, node_name)
     os.makedirs(directory)
     return directory

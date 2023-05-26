@@ -28,11 +28,11 @@ services:
       RH_NAME: "tower" #CHANGE: peyo to the name of your host (e.g. titan6, myubuntu, caai1)
       RH_MEMORY: 16 #CHANGE:  GB RAM on machine
       RH_GPU_MEM: "8" #CHANGE: GB GPU on machine. If multiple GPUs, make a list like: "8,8,12"
-      RH_PROCESSES: 4 #CHANGE: The number of cores on your machine
+      RH_NUM_THREADS: 4 #CHANGE: The number of threads on your machine
 
   ## Test node
-  add: # CHANGE: to the name of the image which mydependant node depends on
-    image: rhnode/add:latest #CHANGE: to the image of whichever node mydependant node depends on
+  add: # CHANGE: to the name of the image which mydependent node depends on
+    image: rhnode/add:latest #CHANGE: to the image of whichever node mydependent node depends on
 
     expose:
       - "8000"
@@ -47,15 +47,15 @@ services:
               capabilities: [gpu]
 
   ## Test node
-  mydependant: #CHANGE: to the name of your node
-    image: rhnode/mydependant:latest # CHANGE: to the image name of your node
+  mydependent: #CHANGE: to the name of your node
+    image: rhnode/mydependent:latest # CHANGE: to the image name of your node
 
     build: .
 
     expose:
       - "8000"
     labels:
-      - "traefik.http.routers.mydependant.rule=PathPrefix(`/mydependant`)" #CHANGE: to "traefik.http.routers.[NODE_NAME].rule=PathPrefix(`/[NODE_NAME]`)
+      - "traefik.http.routers.mydependent.rule=PathPrefix(`/mydependent`)" #CHANGE: to "traefik.http.routers.[NODE_NAME].rule=PathPrefix(`/[NODE_NAME]`)
     deploy:
       resources:
         reservations:

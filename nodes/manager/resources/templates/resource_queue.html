@@ -16,7 +16,7 @@
           </button>
           <div class="collapse navbar-collapse" id="navbarsExample07XL">
             <ul class="navbar-nav me-auto mb-2 mb-lg-0">
-            <a class="navbar-brand" href="/manager">Queue @ {{host_name}}</a>
+            <a class="navbar-brand" href="/manager">Manager @ {{host_name}}</a>
 
               <li class="nav-item">
                 <a class="nav-link" aria-current="page" href="/manager/docs">API</a>
@@ -53,21 +53,21 @@
     {% for gpu in gpus %}
     <p>GPU Device {{ gpu.id }}: {{ gpu.mem_available }}gb / {{ gpu.mem_max }}gb</p>
     {% endfor %}
-    <p>Total Cores: {{ cores_available }} / {{ cores_max }}</p>
+    <p>Total threads: {{ threads_available }} / {{ threads_max }}</p>
     <p>Total Memory: {{ memory_available }}gb / {{ memory_max }}gb</p>
 <!-- 
     {% for node in nodes %}
     <p>Node: {{ node.name }}: {{ node.gpu_gb_required }}</p>
     {% endfor %} -->
 
-    <h2 class="mt-4">Active Jobs</h2>
+    <h2 class="mt-4">Active jobs</h2>
     <table class="table table-bordered">
         <thead>
             <tr>
                 <th>Job ID</th>
                 <th>GPU Device ID</th>
                 <th>Required GPU Memory</th>
-                <th>Required Cores</th>
+                <th>Required threads</th>
                 <th>Required Memory</th>
             </tr>
         </thead>
@@ -77,21 +77,21 @@
                 <td><a href="{{job.href}}">{{ job.job_id }}</a></td>
                 <td>{{ job.gpu_device_id }}</td>
                 <td>{{ job.required_gpu_mem }}</td>
-                <td>{{ job.required_cores }}</td>
+                <td>{{ job.required_threads }}</td>
                 <td>{{ job.required_memory }}</td>
             </tr>
             {% endfor %}
         </tbody>
     </table>
 
-    <h2 class="mt-4">Queue</h2>
+    <h2 class="mt-4">Queued jobs</h2>
     <table class="table table-bordered">
         <thead>
             <tr>
                 <th>Job ID</th>
                 <th>Priority</th>
                 <th>Required GPU Memory</th>
-                <th>Required Cores</th>
+                <th>Required threads</th>
                 <th>Required Memory</th>
             </tr>
         </thead>
@@ -101,7 +101,7 @@
                 <td><a href="{{job.href}}">{{ job.job_id }}</a></td>
                 <td>{{ job.priority }}</td>
                 <td>{{ job.required_gpu_mem }}</td>
-                <td>{{ job.required_cores }}</td>
+                <td>{{ job.required_threads }}</td>
                 <td>{{ job.required_memory }}</td>
             </tr>
             {% endfor %}

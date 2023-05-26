@@ -5,36 +5,31 @@ import requests
 import asyncio
 import uuid
 from .cache import Cache
-from .utils import *
+from .rhjob import *
 from .common import *
 from fastapi.responses import FileResponse
-
 from fastapi import FastAPI, File, Form, UploadFile, BackgroundTasks
-from .jobs import Job
+from .rhprocess import RHProcess
 from .frontend import setup_frontend_routes
 import traceback
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-
-from datetime import time
 
 MANAGER_URL = "http://manager:8000/manager"
 
-# Define a Jinja2 environment that can load templates from a package
-
 
 class RHNode(ABC, FastAPI):
-    # make input_spec required
+    """Base class for RHNode. All custom nodes should inherit from this class"""
+
     input_spec: BaseModel
     output_spec: BaseModel
     name: str
     cache_size = 3
     requires_gpu = True
     cache_directory = ".cache"
-    task_directory = ".tasks"
-    input_directory = ".inputs"
+    output_directory = ".outputs"  # Where the output files are stored for each job
+    input_directory = ".inputs"  # Where the input files are stored for each job
 
     required_gb_gpu_memory = None
-    required_num_processes = None
+    required_num_threads = None
     required_gb_memory = None
 
     def __init__(self):
@@ -47,18 +42,35 @@ class RHNode(ABC, FastAPI):
             self.cache_directory, self.output_spec, self.input_spec, self.cache_size
         )
 
+        # Effectively the "database" of the node
         self.jobs = {}
+
+        # Create variants of input and output spec for different stages of the job
         self.output_spec_url = create_filepath_as_string_model(self.output_spec)
         self.input_spec_no_file = create_model_no_files(self.input_spec)
+
+        # A list of the input keys of FilePath type.
         self.file_keys = [
             key
             for key, val in self.input_spec.__fields__.items()
             if val.type_ == FilePath
         ]
 
-        self.default_job_args = {
+        self.setup_api_routes()
+        setup_frontend_routes(self)
+
+    def CREATE_JOB(self, input_spec_no_file):
+        """Create a job (named RHProcess as not to conflict with RHJob).
+        See rhprocess.py for more details."""
+
+        # Generate a unique ID for the job
+        while (ID := str(uuid.uuid4())) in self.jobs.keys():
+            continue
+
+        # Standard job arguments
+        default_job_args = {
             "required_gb_gpu_memory": self.required_gb_gpu_memory,
-            "required_num_processes": self.required_num_processes,
+            "required_num_threads": self.required_num_threads,
             "required_gb_memory": self.required_gb_memory,
             "target_function": self.__class__.process_wrapper,
             "manager_endpoint": MANAGER_URL,
@@ -68,52 +80,32 @@ class RHNode(ABC, FastAPI):
             "name": self.name,
         }
 
-        self.setup_api_routes()
-        setup_frontend_routes(self)
-
-        self.scheduler = AsyncIOScheduler()
-
-        # Schedule your task to run at 4am every day
-        self.scheduler.add_job(self._remove_old_jobs, "cron", hour=4, minute=0)
-
-        # Start the scheduler
-        self.scheduler.start()
-
-    def _remove_old_jobs(self):
-        current_time = time.time()
-        to_remove = []
-
-        for job_id, job in self.jobs.items():
-            delta_hours = (current_time - job.time_created) / 3600
-            if delta_hours > 4:
-                job.delete()
-
-    def CREATE_JOB(self, input_spec_no_file):
-        while (ID := str(uuid.uuid4())) in self.jobs.keys():
-            continue
-        job = Job(
+        # Create the job, and store it in the jobs dictionary
+        job = RHProcess(
             inputs_no_files=input_spec_no_file,
             ID=ID,
-            output_directory=Path(self.task_directory) / ID,
+            output_directory=Path(self.output_directory) / ID,
             input_directory=Path(self.input_directory) / ID,
-            **self.default_job_args,
+            **default_job_args,
         )
 
         self.jobs[ID] = job
         return ID
 
     async def _register_with_manager(self):
+        """Try to register the node with the manager. This is called at startup."""
+
         success = False
-        for i in range(5):
+        for _i in range(5):
             print("Trying to register with manager")
             try:
                 url = MANAGER_URL + "/register_node"
-                node = Node(
+                node = NodeMetaData(
                     name=self.name,
                     last_heard_from=0,
                     gpu_gb_required=self.required_gb_gpu_memory,
                     memory_required=self.required_gb_memory,
-                    cores_required=self.required_num_processes,
+                    threads_required=self.required_num_threads,
                 )
                 response = requests.post(url, json=node.dict())
                 response.raise_for_status()
@@ -127,10 +119,12 @@ class RHNode(ABC, FastAPI):
             print("Registered with manager")
 
     def _create_url(self, url):
+        """Create a URL for the node, with the node name as a prefix."""
         assert url.startswith("/") or url == ""
         return "/" + self.name + url
 
     def _get_output_with_download_links(self, job_id):
+        """Get the output of a finished job, with download links for any FilePath fields."""
         job = self.jobs[job_id]
         return self.output_spec_url(
             **{
@@ -142,6 +136,8 @@ class RHNode(ABC, FastAPI):
         )
 
     def setup_api_routes(self):
+        """Setup the API routes for the node. See frontend.py for the frontend routes."""
+
         @self.post(self._create_url("/jobs"))
         async def _post_new_job(inputs: self.input_spec_no_file) -> str:
             job_id = self.CREATE_JOB(inputs)
@@ -153,10 +149,10 @@ class RHNode(ABC, FastAPI):
         ) -> str:
             job_obj = self.jobs[job_id]
             background_tasks.add_task(job_obj.run, job)
-            return "ok"
+            return "OK"
 
         @self.get(self._create_url("/jobs/{job_id}/status"))
-        async def _get_job_status(job_id: str) -> QueueStatus:
+        async def _get_job_status(job_id: str) -> JobStatus:
             return self.jobs[job_id].status
 
         @self.get(self._create_url("/jobs/{job_id}/data"))
@@ -189,8 +185,11 @@ class RHNode(ABC, FastAPI):
             file: UploadFile = File(...),
             key: str = Form(...),
         ):
+            """Upload an input file to a job. The key must be one of the file keys."""
             assert key in self.file_keys
             job = self.jobs[job_id]
+
+            # The outer with statement is to ensure that the file is validated after upload
             with job.upload_file(key, file.filename) as fpath:
                 with open(fpath, "wb") as f:
                     f.write(await file.read())
@@ -200,12 +199,15 @@ class RHNode(ABC, FastAPI):
         ### OTHER
         @self.on_event("startup")
         async def register_on_startup():
+            # print(multiprocessing.get_start_method())
             """Looks for manager node at startup and initializes multiprocessing module"""
+            # if not os.environ.get("PYTEST", False):
             multiprocessing.set_start_method("spawn")
             asyncio.create_task(self._register_with_manager())
 
     @classmethod
     def process_wrapper(cls, inputs, job, result_queue):
+        """Wrapper for the process function. It has two purposes: catching errors and packing the output of the process function into the "queue" object."""
         try:
             response = cls.process(inputs, job)
             result_queue.put(("success", response))

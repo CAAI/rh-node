@@ -2,10 +2,10 @@
 # Edit at https://www.toptal.com/developers/gitignore?templates=visualstudiocode,python
 
 *.inputs
-*.tasks
+*.outputs
 *.cache
 
-test/
+tests/data/
 output/
 .vscode
 ### Python ###

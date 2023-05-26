@@ -5,3 +5,4 @@ pydantic
 fastapi
 python-multipart
 fastapi-utils
+python-dotenv

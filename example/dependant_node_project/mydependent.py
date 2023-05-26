@@ -1,4 +1,4 @@
-from rhnode import RHNode, NodeRunner
+from rhnode import RHNode, RHJob
 from pydantic import BaseModel, FilePath
 import nibabel as nib
 
@@ -14,21 +14,21 @@ class MyOutputs(BaseModel):
     img2: FilePath
 
 
-class MyDependantNode(RHNode):
+class MyDependentNode(RHNode):
     input_spec = MyInputs
     output_spec = MyOutputs
-    name = "mydependant"
+    name = "mydependent"
 
     required_gb_gpu_memory = 1
-    required_num_processes = 1
+    required_num_threads = 1
     required_gb_memory = 1
 
     def process(inputs, job):
         add_inputs = {"scalar": 1, "in_file": inputs.in_file}
-        add_1_node = NodeRunner("add", add_inputs, job)
+        add_1_node = RHJob.from_parent_job("add", add_inputs, job)
 
         add_inputs = {"scalar": 1, "in_file": inputs.in_file}
-        add_2_node = NodeRunner("add", add_inputs, job)
+        add_2_node = RHJob.from_parent_job("add", add_inputs, job)
 
         # Start nodes in parallel
         add_1_node.start()
@@ -50,4 +50,4 @@ class MyDependantNode(RHNode):
         )
 
 
-app = MyDependantNode()
+app = MyDependentNode()

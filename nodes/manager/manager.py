@@ -1,47 +1,46 @@
 import heapq
-import fastapi
 import requests
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
-from jinja2 import Environment, FileSystemLoader
-import uuid
+from fastapi.responses import RedirectResponse
 import os
-from pydantic import BaseModel
-import time
 import socket
 from fastapi import FastAPI, HTTPException
 from fastapi.templating import Jinja2Templates
-from rhnode.utils import JobRequest, Node
+from rhnode.rhjob import QueueRequest, NodeMetaData
+from dotenv import load_dotenv
+
+# load .env variables
+load_dotenv()
 
 
 class ResourceQueue:
-    def __init__(self, available_gpus_mem, available_cores, available_memory):
+    def __init__(self, available_gpus_mem, available_threads, available_memory):
         self.gpu_devices_mem_max = available_gpus_mem.copy()
         self.gpu_devices_mem_available = available_gpus_mem.copy()
         self.num_gpus = len(self.gpu_devices_mem_available)
-        self.cores_available = available_cores
+        self.threads_available = available_threads
         self.memory_available = available_memory
-        self.cores_max = available_cores
+        self.threads_max = available_threads
         self.memory_max = available_memory
         self.job_queue = []
         self.active_jobs = {}
 
     def add_job(
-        self, job_id, priority, required_gpu_mem, required_cores, required_memory
+        self, job_id, priority, required_gpu_mem, required_threads, required_memory
     ):
         if priority < 1 or priority > 5:
             raise ValueError("Priority must be between 1 and 5.")
 
         if (
             required_gpu_mem > max(self.gpu_devices_mem_max)
-            or required_cores > self.cores_max
+            or required_threads > self.threads_max
             or required_memory > self.memory_max
         ):
             raise ValueError("Job requirements exceed available resources.")
 
         heapq.heappush(
             self.job_queue,
-            (-priority, job_id, required_gpu_mem, required_cores, required_memory),
+            (-priority, job_id, required_gpu_mem, required_threads, required_memory),
         )
         self.process_queue()
 
@@ -51,26 +50,26 @@ class ResourceQueue:
                 _,
                 job_id,
                 required_gpu_mem,
-                required_cores,
+                required_threads,
                 required_memory,
             ) = self.job_queue[0]
 
             gpu_device_id = self.get_available_gpu_device(required_gpu_mem)
             if (
                 gpu_device_id is not None
-                and self.cores_available >= required_cores
+                and self.threads_available >= required_threads
                 and self.memory_available >= required_memory
             ):
                 heapq.heappop(self.job_queue)
 
                 self.gpu_devices_mem_available[gpu_device_id] -= required_gpu_mem
-                self.cores_available -= required_cores
+                self.threads_available -= required_threads
                 self.memory_available -= required_memory
 
                 self.active_jobs[job_id] = (
                     gpu_device_id,
                     required_gpu_mem,
-                    required_cores,
+                    required_threads,
                     required_memory,
                 )
             else:
@@ -87,12 +86,12 @@ class ResourceQueue:
             (
                 gpu_device_id,
                 required_gpu_mem,
-                required_cores,
+                required_threads,
                 required_memory,
             ) = self.active_jobs[job_id]
 
             self.gpu_devices_mem_available[gpu_device_id] += required_gpu_mem
-            self.cores_available += required_cores
+            self.threads_available += required_threads
             self.memory_available += required_memory
 
             del self.active_jobs[job_id]
@@ -126,8 +125,8 @@ class ResourceQueue:
                 )
             ],
             "gpu_devices_mem_max": self.gpu_devices_mem_max,
-            "cores_available": self.cores_max - self.cores_available,
-            "cores_max": self.cores_max,
+            "threads_available": self.threads_max - self.threads_available,
+            "threads_max": self.threads_max,
             "memory_available": self.memory_max - self.memory_available,
             "memory_max": self.memory_max,
         }
@@ -140,14 +139,14 @@ class ResourceQueue:
         for job_id, (
             gpu_device_id,
             required_gpu_mem,
-            required_cores,
+            required_threads,
             required_memory,
         ) in self.active_jobs.items():
             active_jobs_info.append(
                 {
                     "gpu_device_id": gpu_device_id,
                     "required_gpu_mem": required_gpu_mem,
-                    "required_cores": required_cores,
+                    "required_threads": required_threads,
                     "required_memory": required_memory,
                     "job_id": job_id,
                 }
@@ -160,7 +159,7 @@ templates = Jinja2Templates(
 )
 
 
-class RHServer(FastAPI):
+class RHManager(FastAPI):
     def __init__(self):
         super().__init__(
             docs_url="/manager/docs", openapi_url="/manager/api/openapi.json"
@@ -171,7 +170,7 @@ class RHServer(FastAPI):
 
         self.queue = ResourceQueue(
             available_gpus_mem=[int(x) for x in os.environ["RH_GPU_MEM"].split(",")],
-            available_cores=int(os.environ["RH_PROCESSES"]),
+            available_threads=int(os.environ["RH_NUM_THREADS"]),
             available_memory=int(os.environ["RH_MEMORY"]),
         )
         self.setup_routes()
@@ -206,7 +205,7 @@ class RHServer(FastAPI):
 
     def setup_routes(self):
         @self.post("/manager/register_node")
-        def _register_node(node: Node):
+        def _register_node(node: NodeMetaData):
             self.nodes[node.name] = node.dict()
             return "ok"
 
@@ -219,13 +218,13 @@ class RHServer(FastAPI):
             return self.get_addr_to_run_node(node_name)
 
         @self.post("/manager/add_job")
-        async def add_job(job_request: JobRequest):
+        async def add_job(job_request: QueueRequest):
             try:
                 self.queue.add_job(
                     job_request.job_id,
                     job_request.priority,
                     job_request.required_gpu_mem,
-                    job_request.required_cores,
+                    job_request.required_threads,
                     job_request.required_memory,
                 )
             except ValueError as e:
@@ -257,7 +256,7 @@ class RHServer(FastAPI):
                         "priority": job[0] * -1,
                         "job_id": job[1],
                         "required_gpu_mem": job[2],
-                        "required_cores": job[3],
+                        "required_threads": job[3],
                         "required_memory": job[4],
                     }
                     for job in self.queue.job_queue
@@ -284,7 +283,7 @@ class RHServer(FastAPI):
                     "priority": job[0] * -1,
                     "job_id": job[1],
                     "required_gpu_mem": job[2],
-                    "required_cores": job[3],
+                    "required_threads": job[3],
                     "required_memory": job[4],
                 }
                 for job in self.queue.job_queue
@@ -324,8 +323,8 @@ class RHServer(FastAPI):
                     "active_jobs": active_jobs,
                     "queued_jobs": queued_jobs,
                     "gpus": gpu_info,
-                    "cores_max": available_resources["cores_max"],
-                    "cores_available": available_resources["cores_available"],
+                    "threads_max": available_resources["threads_max"],
+                    "threads_available": available_resources["threads_available"],
                     "memory_max": available_resources["memory_max"],
                     "memory_available": available_resources["memory_available"],
                     "nodes": nodes,
@@ -333,4 +332,4 @@ class RHServer(FastAPI):
             )
 
 
-app = RHServer()
+app = RHManager()

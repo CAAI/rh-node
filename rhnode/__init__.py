@@ -1,6 +1,6 @@
 # try:
 from .rhnode import RHNode
-from .utils import RHJob
+from .rhjob import RHJob
 
 # except ImportError:
 #    pass

@@ -1,7 +1,7 @@
 import os
 from fastapi.staticfiles import StaticFiles
-from .utils import QueueStatus
-from fastapi.responses import HTMLResponse
+from .rhjob import JobStatus
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi import Request
 from jinja2 import Environment, FileSystemLoader
 from .common import *
@@ -54,7 +54,7 @@ def setup_frontend_routes(rhnode):
     async def _show(job_id: str) -> HTMLResponse:
         job = rhnode.jobs[job_id]
         output = None
-        if job.status == QueueStatus.Finished:
+        if job.status == JobStatus.Finished:
             output = rhnode._get_output_with_download_links(job_id)
             output = _format_job_result_html(output)
 
@@ -69,6 +69,10 @@ def setup_frontend_routes(rhnode):
 
         # Return the rendered webpage
         return html_content
+
+    @rhnode.get("/")
+    async def redirect_to_manager(request: Request):
+        return RedirectResponse(url=rhnode._create_url(""))
 
     rhnode.mount(
         rhnode._create_url("/static"),
