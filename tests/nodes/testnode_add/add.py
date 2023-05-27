@@ -30,7 +30,7 @@ class AddNode(RHNode):
         img = nib.load(inputs.in_file)
         arr = img.get_fdata() + inputs.scalar
         img = nib.Nifti1Image(arr, img.affine, img.header)
-        outpath = job.directory / "added.nii.gz"
+        outpath = job.directory / "added1.nii.gz"
         img.to_filename(outpath)
         time.sleep(inputs.sleep_time)
 

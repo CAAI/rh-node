@@ -265,6 +265,8 @@ class RHProcess:
     def upload_file(self, file_key, in_filename):
         filename = create_file_name_from_key(file_key, in_filename)
         file_path = self.input_directory / filename
+        ## NOTE: if the basenames of two input files are identical, the file will be overwritten
+
         yield file_path
 
         assert os.path.isfile(file_path)

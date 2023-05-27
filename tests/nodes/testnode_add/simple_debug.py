@@ -5,9 +5,11 @@ from rhnode import RHJob
 
 data = {
     "scalar": 3,
-    "in_file": "/homes/hinge/Projects/rh-node/test/mr.nii.gz",
-    "sleep_time": 2,
+    "in_file": "/homes/hinge/Projects/rh-node/tests/data/mr.nii.gz",
+    "sleep_time": 0,
     "throw_error": False,
+    # "out_file":"added.nii.gz",
+    # "out_message": "out_msg.txt"
 }
 
 node = RHJob(
@@ -15,13 +17,10 @@ node = RHJob(
     inputs=data,
     # manager_adress="tower:9050",
     resources_included=True,
-    # included_cuda_device=0,
-    # host="localhost:9050",
-    # port="9050",
+    node_address="localhost:8009",
+    output_directory=".temp_output",
+    save_non_files=True,
     check_cache=False,
 )
 node.start()
 output = node.wait_for_finish()
-
-# Alternatively to interrupt the job:
-# node.stop()
