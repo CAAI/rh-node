@@ -11,6 +11,7 @@ import traceback
 from .common import *
 from contextlib import contextmanager
 import time
+from pydantic import ValidationError
 
 
 class RHProcess:
@@ -186,6 +187,13 @@ class RHProcess:
                 new_d[key] = val
 
         return self.output_spec(**new_d)
+
+    def is_ready_to_run(self):
+        try:
+            self.input_spec(**self.input.dict())
+            return True
+        except ValidationError:
+            return False
 
     ## JOB RUNNING
     async def run(self, job):
