@@ -4,21 +4,6 @@ from pydantic import BaseModel
 import time
 import os
 from .common import *
-import json
-
-# -output directory
-# -n --node_address
-# -m --manager_address
-# -o --output
-# -p --priority
-# -nc --no_cache
-# -ns --no_save
-# -r --resources_included
-# -g --gpu
-
-# NodeName
-
-# NodeInput
 
 
 class RHJob:
@@ -35,7 +20,18 @@ class RHJob:
         save_to_cache=True,
         priority=2,
         save_non_files=False,
+        _cli_mode=False,
     ):
+        self._cli_mode = _cli_mode
+        if self._cli_mode:
+            assert isinstance(
+                inputs, list
+            ), "inputs must be a list of arguments in _cli_mode"
+        else:
+            assert isinstance(
+                inputs, dict
+            ), "inputs must be a dict of arguments if not in _cli_mode"
+
         self.save_non_files = save_non_files
         self.node_identifier = node_name
 
@@ -192,6 +188,9 @@ class RHJob:
         if not self.host:
             self.host, self.port = self._get_addr_for_job(self.node_identifier)
 
+        if self._cli_mode:
+            self.input_output_data = self._parse_cli(self.input_output_data)
+
         self.input_data, self.output_data = self._split_input_output_data(
             self.input_output_data
         )
@@ -311,6 +310,7 @@ class RHJob:
                 with open(fname, "wb") as f:
                     f.write(response.content)
                 output[key] = fname
+
             elif key in self.output_data.keys():
                 fname = Path(self.output_data[key]).absolute()
 
@@ -324,6 +324,12 @@ class RHJob:
                     f.write(str(value))
 
         return output
+
+    def _parse_cli(self, input_output_data):
+        url = f"http://{self.host}:{self.port}/{self.node_identifier}/parse_cli"
+        response = requests.post(url, json=input_output_data)
+        response.raise_for_status()
+        return response.json()
 
 
 def replace_paths_with_strings(inp):

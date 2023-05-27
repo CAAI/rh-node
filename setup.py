@@ -17,6 +17,11 @@ setup(
     url="https://github.com/CAAI/rh-node",
     packages=find_packages(),
     include_package_data=True,
+    entry_points={
+        "console_scripts": [
+            "rhjob = rhnode.cli:main",
+        ],
+    },
     install_requires=[
         "uvicorn",
         "requests",

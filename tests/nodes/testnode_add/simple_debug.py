@@ -1,15 +1,11 @@
 from rhnode import RHJob
 
-
 # NOTE: manager_adress and host/port are mutually exclusive.
 
 data = {
     "scalar": 3,
     "in_file": "/homes/hinge/Projects/rh-node/tests/data/mr.nii.gz",
-    "sleep_time": 0,
-    "throw_error": False,
-    # "out_file":"added.nii.gz",
-    # "out_message": "out_msg.txt"
+    "out_file": "added.nii.gz",
 }
 
 node = RHJob(
