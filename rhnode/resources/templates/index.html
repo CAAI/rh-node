@@ -9,13 +9,33 @@
         <tr>
           <th>ID</th>
           <th>Status</th>
+          <th>Priority</th>
+          <th>Created</th>
         </tr>
       </thead>
       <tbody>
         {% for item in tasks %}
-        <tr>
+        {% if item.status == 'Preparing' %}
+        <tr class="table-primary">
+        {% elif item.status == 'Queued' %}
+        <tr class="table-info">
+        {% elif item.status == 'Running' %}
+        <tr class="table-success">
+        {% elif item.status == 'Finished' %}
+        <tr class="table-default">
+        {% elif item.status == 'Error' %}
+        <tr class="table-danger">
+        {% elif item.status == 'Cancelling' %}
+        <tr class="table-warning">
+        {% elif item.status == 'Cancelled' %}
+        <tr class="table-danger">
+        {% else %}
+        <tr">
+        {% endif %}          
           <td><a href = "{{item.href}}">{{ item.task_id }}</a></td>
-            <td>{{ item.status }}</td>
+          <td>{{ item.status }}</td>
+            <td>{{ item.priority }}</td>
+            <td>{{ item.date }}</td>
         </tr>
         {% endfor %}
       </tbody>

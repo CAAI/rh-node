@@ -48,20 +48,23 @@
       </nav>
 
 <div class="container mt-5">
-    <h1 class="mb-4">Resource Queue</h1>
-    <h2>Host Resource Usage</h2>
-    {% for gpu in gpus %}
-    <p>GPU Device {{ gpu.id }}: {{ gpu.mem_available }}gb / {{ gpu.mem_max }}gb</p>
-    {% endfor %}
-    <p>Total threads: {{ threads_available }} / {{ threads_max }}</p>
-    <p>Total Memory: {{ memory_available }}gb / {{ memory_max }}gb</p>
-<!-- 
-    {% for node in nodes %}
-    <p>Node: {{ node.name }}: {{ node.gpu_gb_required }}</p>
-    {% endfor %} -->
-
+  <h2>Resource usage</h2>
+  {% for gpu in gpus %}
+  <div class="progress  mt-3" style="height: 20px;">
+      <div class="progress-bar" role="progressbar" style="width: {{ gpu.mem_available / gpu.mem_max * 100 }}%;" aria-valuenow="{{ gpu.mem_available / gpu.mem_max * 100 }}" aria-valuemin="0" aria-valuemax="100"></div>
+  </div>
+  <div class="text-center"><b>GPU {{ gpu.id }}</b>&nbsp;&nbsp;&nbsp;{{ gpu.mem_available }}gb / {{ gpu.mem_max }}gb ({{ gpu.mem_available / gpu.mem_max * 100 }}%)</div>
+  {% endfor %}
+  <div class="progress mt-3" style="height: 20px;">
+      <div class="progress-bar" role="progressbar" style="width: {{ threads_available / threads_max * 100 }}%;" aria-valuenow="{{ threads_available / threads_max * 100 }}" aria-valuemin="0" aria-valuemax="100"></div>
+  </div>
+  <div class="text-center"><b>Threads</b>&nbsp;&nbsp;&nbsp;{{ threads_available }} / {{ threads_max }} ({{ threads_available / threads_max * 100 }}%)</div>
+  <div class="progress  mt-3" style="height: 20px;">
+      <div class="progress-bar" role="progressbar" style="width: {{ memory_available / memory_max * 100 }}%;" aria-valuenow="{{ memory_available / memory_max * 100 }}" aria-valuemin="0" aria-valuemax="100"></div>
+  </div>
+  <div class="text-center"><b> Memory</b>&nbsp;&nbsp;&nbsp;{{ memory_available }}gb / {{ memory_max }}gb ({{ memory_available / memory_max * 100 }}%)</div>
     <h2 class="mt-4">Active jobs</h2>
-    <table class="table table-bordered">
+    <table class="table table-striped">
         <thead>
             <tr>
                 <th>Job ID</th>
@@ -85,7 +88,7 @@
     </table>
 
     <h2 class="mt-4">Queued jobs</h2>
-    <table class="table table-bordered">
+    <table class="table table-striped">
         <thead>
             <tr>
                 <th>Job ID</th>
