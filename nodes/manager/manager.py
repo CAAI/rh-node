@@ -6,7 +6,7 @@ import os
 import socket
 from fastapi import FastAPI, HTTPException
 from fastapi.templating import Jinja2Templates
-from rhnode.rhjob import QueueRequest, NodeMetaData
+from rhnode.common import QueueRequest, NodeMetaData
 from dotenv import load_dotenv
 
 # load .env variables
