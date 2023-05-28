@@ -5,7 +5,7 @@ from rhnode import RHJob
 
 data = {
     "scalar": 3,
-    "in_file": "/homes/hinge/Projects/rh-node/test/mr.nii.gz",
+    "in_file": "/homes/hinge/Projects/rh-node/tests/data/mr.nii.gz",
     "sleep_time": 2,
     "throw_error": False,
 }
@@ -18,6 +18,7 @@ node = RHJob(
     # included_cuda_device=0,
     # host="localhost:9050",
     # port="9050",
+    node_address="localhost:8009",
     check_cache=False,
 )
 node.start()
