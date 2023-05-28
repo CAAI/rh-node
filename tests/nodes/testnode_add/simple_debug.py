@@ -16,7 +16,7 @@ node = RHJob(
     # manager_adress="tower:9050",
     resources_included=True,
     # included_cuda_device=0,
-    node_address="localhost:8009",
+    # node_address="localhost:8009",
     # port="9050",
     check_cache=False,
 )

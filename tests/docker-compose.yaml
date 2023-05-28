@@ -33,6 +33,7 @@ services:
       RH_MEMORY: 12
       RH_GPU_MEM: "8"
       RH_NUM_THREADS: 12
+      
 
   ## Testnode: Dependent
   dependent:
@@ -57,4 +58,6 @@ services:
       - "8000"
     labels:
       - "traefik.http.routers.add.rule=PathPrefix(`/add`)"
-      
+    environment:
+      RH_EMAIL_ON_ERROR: christian.hinge@regionh.dk
+      TZ: "Europe/Copenhagen"

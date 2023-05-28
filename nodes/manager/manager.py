@@ -9,7 +9,7 @@ from fastapi.templating import Jinja2Templates
 from rhnode.rhjob import QueueRequest, NodeMetaData
 from dotenv import load_dotenv
 
-# load .env variables
+# load env variables from .env file if it exists
 load_dotenv()
 
 
@@ -270,6 +270,10 @@ class RHManager(FastAPI):
         @self.get("/manager/ping")
         async def ping():
             return True
+
+        @self.get("/manager/host_name")
+        async def host_name():
+            return self.host_addr.split(":")[0]
 
         @self.get("/")
         async def redirect_to_manager(request: Request):

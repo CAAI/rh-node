@@ -6,21 +6,6 @@ import os
 from .common import *
 
 
-# -output directory
-# -n --node_address
-# -m --manager_address
-# -o --output
-# -p --priority
-# -nc --no_cache
-# -ns --no_save
-# -r --resources_included
-# -g --gpu
-
-# NodeName
-
-# NodeInput
-
-
 class RHJob:
     def __init__(
         self,
