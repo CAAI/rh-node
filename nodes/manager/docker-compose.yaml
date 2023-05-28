@@ -13,10 +13,10 @@ services:
     volumes:
       # So that Traefik can listen to the Docker events
       - /var/run/docker.sock:/var/run/docker.sock
-
+  
   #Queue Node
   manager:
-    image: rhnode/manager:v1
+    image: rhnode/manager:1.0.0
     build: 
       context: ../../
       dockerfile: nodes/manager/Dockerfile.prod
