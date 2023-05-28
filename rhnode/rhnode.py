@@ -12,6 +12,7 @@ from fastapi import FastAPI, File, Form, UploadFile, BackgroundTasks
 from .rhprocess import RHProcess
 from .frontend import setup_frontend_routes
 import traceback
+import datetime
 
 MANAGER_URL = "http://manager:8000/manager"
 
@@ -58,6 +59,51 @@ class RHNode(ABC, FastAPI):
 
         self.setup_api_routes()
         setup_frontend_routes(self)
+
+    def _delete_job(self, job_id):
+        pass
+        job = self.jobs[job_id]
+        job.delete_files()
+        del self.jobs[job_id]
+
+    def _get_expired_job_ids(self, max_age_hours=8):
+        """Get a list of job IDs that have been in the queue for longer than max_age_hours"""
+        expired_job_ids = []
+        for job_id, job in self.jobs.items():
+            if (time.time() - job.time_created) / 3600 > max_age_hours:
+                if job.status in [
+                    JobStatus.Finished,
+                    JobStatus.Error,
+                    JobStatus.Cancelled,
+                ]:
+                    expired_job_ids.append(job_id)
+
+        return expired_job_ids
+
+    async def _delete_expired_jobs_loop(
+        self, hour: int = 3, minute: int = 30, second: int = 0
+    ):
+        print("Starting daily task to delete expired jobs")
+        while True:
+            now = datetime.datetime.now()
+
+            # Set the time for the next task run
+            next_run = datetime.datetime.combine(
+                now.date(), datetime.time(hour, minute, second)
+            )
+
+            # If the time has already passed for today, schedule it for tomorrow
+            if now.time() > datetime.time(hour, minute, second):
+                next_run += datetime.timedelta(days=1)
+
+            delay = (next_run - now).total_seconds()
+            print("Next check in", delay, "seconds")
+            await asyncio.sleep(delay)
+            print("Checking for expired jobs...")
+            jobs = self._get_expired_job_ids()
+            for job_id in jobs:
+                print("Deleting job", job_id)
+                self._delete_job(job_id)
 
     def CREATE_JOB(self, input_spec_no_file):
         """Create a job (named RHProcess as not to conflict with RHJob).
@@ -164,9 +210,14 @@ class RHNode(ABC, FastAPI):
             return self.jobs[job_id].error
 
         @self.post(self._create_url("/jobs/{job_id}/stop"))
-        def _remove_task(job_id: str):
+        def _stop_task(job_id: str):
             self.jobs[job_id].stop()
             return "OK"
+
+        @self.post(self._create_url("/jobs/{job_id}/delete"))
+        async def _delete_job(job_id: str):
+            """Delete a job from the node."""
+            self._delete_job(job_id)
 
         @self.get(self._create_url("/jobs/{job_id}/download/{filename}"))
         def _get_file(job_id, filename):
@@ -204,6 +255,10 @@ class RHNode(ABC, FastAPI):
             # if not os.environ.get("PYTEST", False):
             multiprocessing.set_start_method("spawn")
             asyncio.create_task(self._register_with_manager())
+
+        @self.on_event("startup")
+        async def start_cleaning_loop():
+            asyncio.create_task(self._delete_expired_jobs_loop())
 
     @classmethod
     def process_wrapper(cls, inputs, job, result_queue):

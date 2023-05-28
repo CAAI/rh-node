@@ -80,17 +80,20 @@ class RHProcess:
                     os.rmdir(dir_path)
 
     def _remove_input_directory(self):
-        for file in os.listdir(self.input_directory):
-            fpath = Path(self.input_directory, file).absolute()
-            os.remove(fpath)
-        os.rmdir(self.input_directory)
+        if os.path.exists(self.input_directory):
+            for file in os.listdir(self.input_directory):
+                fpath = Path(self.input_directory, file).absolute()
+                os.remove(fpath)
+            os.rmdir(self.input_directory)
 
     def _remove_output_directory(self):
-        for file in os.listdir(self.output_directory):
-            fpath = Path(self.output_directory, file).absolute()
-            os.remove(fpath)
+        if os.path.exists(self.output_directory):
+            for root, dirs, files in os.walk(self.output_directory):
+                for file in files:
+                    fpath = Path(root, file).absolute()
+                    os.remove(fpath)
 
-        os.rmdir(self.output_directory)
+            os.rmdir(self.output_directory)
 
     def _make_input_directory(self):
         new_dir = os.path.join(self.input_directory)
@@ -270,7 +273,8 @@ class RHProcess:
         assert os.path.isfile(file_path)
         self.input = self.input.copy(update={file_key: self.input_directory / filename})
 
-    def delete(self):
+    def delete_files(self):
+        self._remove_input_directory()
         self._remove_output_directory()
 
     def stop(self):
