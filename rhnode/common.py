@@ -53,7 +53,6 @@ class JobStatus(Enum):
     """Each RHProcess has a status attribute"""
 
     Preparing = -1  # Files are being uploaded
-    Initializing = 0  # The job is being initialized
     Queued = 1  # THe job is queued
     Running = 2  # The job is running
     Finished = 3  # The job is finished

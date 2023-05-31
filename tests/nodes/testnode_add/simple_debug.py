@@ -16,10 +16,11 @@ node = RHJob(
     # manager_adress="tower:9050",
     resources_included=True,
     # included_cuda_device=0,
-    check_cache=False,
+    # host="localhost:9050",
+    # port="9050",
     node_address="localhost:8009",
+    check_cache=False,
 )
-
 node.start()
 output = node.wait_for_finish()
 
