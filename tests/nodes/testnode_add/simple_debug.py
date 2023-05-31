@@ -6,6 +6,8 @@ data = {
     "scalar": 3,
     "in_file": "/homes/hinge/Projects/rh-node/tests/data/mr.nii.gz",
     "out_file": "added.nii.gz",
+    "sleep_time": 2,
+    "throw_error": False,
 }
 
 node = RHJob(
