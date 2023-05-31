@@ -5,6 +5,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi import Request
 from jinja2 import Environment, FileSystemLoader
 from .common import *
+import datetime
 
 _TEMPLATES_DIRECTORY = os.path.dirname(__file__) + "/resources/templates"
 _STATIC_FILES_DIRECTORY = os.path.dirname(__file__) + "/resources/static"
@@ -37,14 +38,21 @@ def setup_frontend_routes(rhnode):
         # Load the template from the package
         template = env.get_template("index.html")
         formats = []
-        for job_id, job in rhnode.jobs.items():
+
+        sorted_jobs = sorted(rhnode.jobs.items(), key=lambda kv: -kv[1].time_created)
+
+        for job_id, job in sorted_jobs:
+            datetime_str = str(datetime.datetime.fromtimestamp(job.time_created))
             formats.append(
                 {
                     "task_id": job_id,
-                    "status": job.status,
+                    "status": job.status.name,
                     "href": rhnode.url_path_for("_show", job_id=job_id),
+                    "date": datetime_str,
+                    "priority": job.priority,
                 }
             )
+
         html_content = template.render(
             default_context=_get_default_context(), tasks=formats
         )
