@@ -56,7 +56,7 @@ class RHProcess:
         self.cache = cache
         self.name = name
         self.status = JobStatus.Preparing
-
+        self.priority = None
         self._make_input_directory()
 
     ## IO
@@ -110,12 +110,12 @@ class RHProcess:
         response.raise_for_status()
         return response.json()
 
-    def _queue(self, job):
+    def _queue(self, job_metadata):
         url = self.manager_endpoint + f"/add_job"
         queue_id = self.name + "_" + self.ID
         jobreq = QueueRequest(
             job_id=queue_id,
-            priority=job.priority,
+            priority=job_metadata.priority,
             required_gpu_mem=self.required_gb_gpu_memory,
             required_threads=self.required_num_threads,
             required_memory=self.required_gb_memory,
@@ -216,6 +216,7 @@ class RHProcess:
             return
 
         self.status = JobStatus.Queued
+        self.priority = job.priority
 
         async with self._maybe_wait_for_resources(job) as cuda_device:
             ## Cancel signal might come in waiting for cuda queue

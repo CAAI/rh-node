@@ -18,6 +18,7 @@ node = RHJob(
     # included_cuda_device=0,
     node_address="localhost:8009",
     # port="9050",
+    node_address="localhost:8009",
     check_cache=False,
 )
 node.start()
