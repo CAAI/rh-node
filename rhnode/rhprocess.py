@@ -166,10 +166,18 @@ class RHProcess:
         """
         new_d = {}
         output_dir = Path(self.output_directory)
-
+        existing_base_names = set()
         for key, val in response.dict(exclude_unset=True).items():
             if self.output_spec.__fields__[key].type_ == FilePath:
                 val = Path(val)
+                base_name = os.path.basename(val)
+                if base_name in existing_base_names:
+                    # TODO: This might be undesirable behaviour
+                    raise Exception(
+                        "Duplicate file basename in output! This is not allowed"
+                    )
+
+                existing_base_names.add(base_name)
 
                 if is_relative_to(val, output_dir):
                     new_d[key] = val
@@ -265,7 +273,10 @@ class RHProcess:
     def upload_file(self, file_key, in_filename):
         filename = create_file_name_from_key(file_key, in_filename)
         file_path = self.input_directory / filename
-        ## NOTE: if the basenames of two input files are identical, the file will be overwritten
+
+        # TODO: this might be undesirable behaviour, but for now, it prevents
+        # Silently overwriting files with identical basenames
+        assert not os.path.isfile(file_path), "File upload error, file already exists"
 
         yield file_path
 
