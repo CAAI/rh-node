@@ -7,14 +7,17 @@ import uuid
 from .cache import Cache
 from .rhjob import *
 from .common import *
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi import FastAPI, File, Form, UploadFile, BackgroundTasks
 from .rhprocess import RHProcess
 from .frontend import setup_frontend_routes
 import traceback
-import datetime
 from fastapi import Response
 from fastapi import HTTPException
+from .email import EmailSender
+import datetime
+from fastapi import Request
+
 
 MANAGER_URL = "http://manager:8000/manager"
 
@@ -59,8 +62,14 @@ class RHNode(ABC, FastAPI):
             if val.type_ == FilePath
         ]
 
+        if recipient := os.environ.get("RH_EMAIL_ON_ERROR"):
+            self.email_sender = EmailSender(recipient)
+        else:
+            self.email_sender = None
+
         self.setup_api_routes()
         setup_frontend_routes(self)
+
 
     def _delete_job(self, job_id):
         pass
@@ -116,8 +125,8 @@ class RHNode(ABC, FastAPI):
     def CREATE_JOB(self, input_spec_no_file):
         """Create a job (named RHProcess as not to conflict with RHJob).
         See rhprocess.py for more details."""
-
         # Generate a unique ID for the job
+
         while (ID := str(uuid.uuid4())) in self.jobs.keys():
             continue
 
@@ -150,6 +159,7 @@ class RHNode(ABC, FastAPI):
         """Try to register the node with the manager. This is called at startup."""
 
         success = False
+        self.host_name = "Unknown"
         for _i in range(5):
             print("Trying to register with manager")
             try:
@@ -163,6 +173,13 @@ class RHNode(ABC, FastAPI):
                 )
                 response = requests.post(url, json=node.dict())
                 response.raise_for_status()
+
+                # If responsive, get the host name of the cluster (used for email notifications)
+                url = MANAGER_URL + "/host_name"
+                response = requests.get(url)
+                response.raise_for_status()
+                self.host_name = response.json()
+
                 success = True
                 break
             except:
@@ -257,7 +274,7 @@ class RHNode(ABC, FastAPI):
 
             return Response(status_code=204)
 
-          
+         
         @self.post(self._create_url("/jobs/{job_id}/delete"))
         async def _delete_job(job_id: str):
             """Delete a job from the node."""
@@ -328,6 +345,16 @@ class RHNode(ABC, FastAPI):
             multiprocessing.set_start_method("spawn")
             asyncio.create_task(self._register_with_manager())
 
+        @self.exception_handler(500)
+        async def internal_exception_handler(request: Request, exc: Exception):
+            if self.email_sender:
+                self.email_sender.send_email_exception(
+                    self.name, self.host_name, datetime.datetime.now()
+                )
+
+            return JSONResponse(
+                status_code=500, content={"code": 500, "msg": "Internal Server Error"}
+            )
         @self.on_event("startup")
         async def start_cleaning_loop():
             asyncio.create_task(self._delete_expired_jobs_loop())
