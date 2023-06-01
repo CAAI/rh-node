@@ -63,7 +63,7 @@ def test_output(tmp_path, param):
     assert output["out_message"] == "this worked"
     assert os.path.exists(expected_output_directory)
     assert len(os.listdir(expected_output_directory)) == 1
-    assert os.path.exists(os.path.join(expected_output_directory, "out_file.nii.gz"))
+    assert os.path.exists(os.path.join(expected_output_directory, "added1.nii.gz"))
     assert JobStatus(node._get_status()) == JobStatus.Finished
     shutil.rmtree(expected_output_directory)
 
@@ -191,4 +191,4 @@ def test_dependent(tmp_path):
     assert os.path.exists(output_directory)
     assert len(os.listdir(output_directory)) == 2
     assert os.path.exists(os.path.join(output_directory, "img1.nii.gz"))
-    assert os.path.exists(os.path.join(output_directory, "img2.nii.gz"))
+    assert os.path.exists(os.path.join(output_directory, "added1.nii.gz"))
