@@ -5,6 +5,8 @@ import time
 import os
 from .common import *
 import json
+from requests.exceptions import HTTPError
+
 
 class RHJob:
     def __init__(
@@ -31,7 +33,6 @@ class RHJob:
             assert isinstance(
                 inputs, dict
             ), "inputs must be a dict of arguments if not in _cli_mode"
-
 
         self.save_non_files = save_non_files
         self.node_identifier = node_name
@@ -68,6 +69,7 @@ class RHJob:
                 options = [
                     ("manager", "8000"),
                     ("localhost", "9050"),
+                    ("titan6", "9050"),
                 ]
                 self.manager_host, self.manager_port = self.select_manager_endpoint(
                     options
@@ -180,8 +182,14 @@ class RHJob:
             elif key in output_keys:
                 output_data[key] = value
             else:
-                raise Exception("Key not found in input or output keys")
+                raise Exception(f"Key '{key}' not found in input or output keys")
         return input_data, output_data
+
+    def print_cli_help(self):
+        if not self.host:
+            self.host, self.port = self._get_addr_for_job(self.node_identifier)
+
+        self._print_help_cli()
 
     def start(self):
         assert self.ID is None, "Already started"
@@ -327,10 +335,26 @@ class RHJob:
         return output
 
     def _parse_cli(self, input_output_data):
-        url = f"http://{self.host}:{self.port}/{self.node_identifier}/parse_cli"
-        response = requests.post(url, json=input_output_data)
-        response.raise_for_status()
+        try:
+            url = f"http://{self.host}:{self.port}/{self.node_identifier}/cli/parse"
+            response = requests.post(url, json=input_output_data)
+            response.raise_for_status()
+
+        except HTTPError as err:
+            if err.response.status_code == 400:
+                raise ValueError(
+                    f"Invalid CLI arguments for {self.node_identifier}:\n{err.response.json()['detail']}"
+                )
+            else:
+                raise
+
         return response.json()
+
+    def _print_help_cli(self):
+        url = f"http://{self.host}:{self.port}/{self.node_identifier}/cli/help"
+        response = requests.get(url)
+        response.raise_for_status()
+        print(response.json())
 
 
 def replace_paths_with_strings(inp):
