@@ -13,6 +13,8 @@ from .rhprocess import RHProcess
 from .frontend import setup_frontend_routes
 import traceback
 import datetime
+from fastapi import Response
+from fastapi import HTTPException
 
 MANAGER_URL = "http://manager:8000/manager"
 
@@ -49,9 +51,9 @@ class RHNode(ABC, FastAPI):
         # Create variants of input and output spec for different stages of the job
         self.output_spec_url = create_filepath_as_string_model(self.output_spec)
         self.input_spec_no_file = create_model_no_files(self.input_spec)
-
+        validate_input_output_spec(self.input_spec, self.output_spec)
         # A list of the input keys of FilePath type.
-        self.file_keys = [
+        self.input_file_keys = [
             key
             for key, val in self.input_spec.__fields__.items()
             if val.type_ == FilePath
@@ -104,6 +106,12 @@ class RHNode(ABC, FastAPI):
             for job_id in jobs:
                 print("Deleting job", job_id)
                 self._delete_job(job_id)
+                
+    def get_job_by_id(self, job_id: str):
+        try:
+            return self.jobs[job_id]
+        except KeyError:
+            raise HTTPException(status_code=404, detail="Job not found")
 
     def CREATE_JOB(self, input_spec_no_file):
         """Create a job (named RHProcess as not to conflict with RHJob).
@@ -171,7 +179,8 @@ class RHNode(ABC, FastAPI):
 
     def _get_output_with_download_links(self, job_id):
         """Get the output of a finished job, with download links for any FilePath fields."""
-        job = self.jobs[job_id]
+        job = self.get_job_by_id(job_id)
+        self._ensure_job_status(job.status, JobStatus.Finished)
         return self.output_spec_url(
             **{
                 key: self.url_path_for("_get_file", job_id=job_id, filename=key)
@@ -180,6 +189,20 @@ class RHNode(ABC, FastAPI):
                 for key, val in job.output.dict(exclude_unset=True).items()
             }
         )
+
+    def _ensure_job_status(self, status, valid_statuses):
+        """Ensure that the job status is valid for the requested action."""
+        if not isinstance(valid_statuses, list):
+            valid_statuses = [valid_statuses]
+        if not status in valid_statuses:
+            raise HTTPException(
+                status_code=400,
+                detail="""
+            The requested action is not valid for the current job status ({}). 
+            Valid statuses are: ({})""".format(
+                    status, ",".join(valid_statuses)
+                ),
+            )
 
     def setup_api_routes(self):
         """Setup the API routes for the node. See frontend.py for the frontend routes."""
@@ -191,15 +214,21 @@ class RHNode(ABC, FastAPI):
 
         @self.post(self._create_url("/jobs/{job_id}/start"))
         async def START_JOB(
-            job_id: str, job: JobMetaData, background_tasks: BackgroundTasks
-        ) -> str:
-            job_obj = self.jobs[job_id]
-            background_tasks.add_task(job_obj.run, job)
-            return "OK"
+            job_id: str, job_meta_data: JobMetaData, background_tasks: BackgroundTasks
+        ) -> Response:
+            job_obj = self.get_job_by_id(job_id)
+            self._ensure_job_status(job_obj.status, JobStatus.Preparing)
+            if not job_obj.is_ready_to_run():
+                raise HTTPException(
+                    status_code=400,
+                    detail="Job is not ready to run. Some files are likely missing.",
+                )
+            background_tasks.add_task(job_obj.run, job_meta_data)
+            return Response(status_code=204)
 
         @self.get(self._create_url("/jobs/{job_id}/status"))
         async def _get_job_status(job_id: str) -> JobStatus:
-            return self.jobs[job_id].status
+            return self.get_job_by_id(job_id).status
 
         @self.get(self._create_url("/jobs/{job_id}/data"))
         async def _get_job_data_download_urls(job_id: str) -> self.output_spec_url:
@@ -207,13 +236,28 @@ class RHNode(ABC, FastAPI):
 
         @self.get(self._create_url("/jobs/{job_id}/error"))
         def _get_job_error(job_id: str):
-            return self.jobs[job_id].error
+            job = self.get_job_by_id(job_id)
+            self._ensure_job_status(job.status, [JobStatus.Cancelled, JobStatus.Error])
+            return job.error
 
         @self.post(self._create_url("/jobs/{job_id}/stop"))
         def _stop_task(job_id: str):
             self.jobs[job_id].stop()
             return "OK"
+          
+        def _remove_task(job_id: str):
+            job = self.get_job_by_id(job_id)
+            if job.status not in [
+                JobStatus.Finished,
+                JobStatus.Cancelled,
+                JobStatus.Cancelling,
+                JobStatus.Error,
+            ]:
+                job.stop()
 
+            return Response(status_code=204)
+
+          
         @self.post(self._create_url("/jobs/{job_id}/delete"))
         async def _delete_job(job_id: str):
             """Delete a job from the node."""
@@ -221,14 +265,36 @@ class RHNode(ABC, FastAPI):
 
         @self.get(self._create_url("/jobs/{job_id}/download/{filename}"))
         def _get_file(job_id, filename):
-            fname = self.jobs[job_id].output.dict()[filename]
+            job = self.get_job_by_id(job_id)
+            self._ensure_job_status(job.status, JobStatus.Finished)
+            if not filename in self.output_spec.__fields__:
+                raise HTTPException(
+                    status_code=404,
+                    detail="The requested file key {} is invalid.".format(filename),
+                )
+            try:
+                fname = job.output.dict()[filename]
+            except KeyError:
+                raise HTTPException(
+                    status_code=404,
+                    detail="The requested file corresponding to key {} could not be found.".format(
+                        filename
+                    ),
+                )
             return FileResponse(
                 fname, filename=create_file_name_from_key(filename, fname)
             )
 
         @self.get(self._create_url("/filename_keys"))
         async def _get_file_keys():
-            return self.file_keys
+            return self.input_file_keys
+
+        @self.get(self._create_url("/keys"))
+        async def _get_keys():
+            return {
+                "output_keys": list(self.output_spec.__fields__.keys()),
+                "input_keys": list(self.input_spec.__fields__.keys()),
+            }
 
         @self.post(self._create_url("/jobs/{job_id}/upload"))
         async def _upload(
@@ -236,16 +302,22 @@ class RHNode(ABC, FastAPI):
             file: UploadFile = File(...),
             key: str = Form(...),
         ):
+            job = self.get_job_by_id(job_id)
+            self._ensure_job_status(job.status, JobStatus.Preparing)
+
             """Upload an input file to a job. The key must be one of the file keys."""
-            assert key in self.file_keys
-            job = self.jobs[job_id]
+            if not key in self.file_keys:
+                raise HTTPException(
+                    status_code=404,
+                    detail="The requested file key {} is invalid.".format(key),
+                )
 
             # The outer with statement is to ensure that the file is validated after upload
             with job.upload_file(key, file.filename) as fpath:
                 with open(fpath, "wb") as f:
                     f.write(await file.read())
 
-            return "OK"
+            return Response(status_code=204)
 
         ### OTHER
         @self.on_event("startup")
