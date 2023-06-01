@@ -1,0 +1,10 @@
+#System
+FROM python:3.8
+
+# RH-Node
+ADD https://api.github.com/repos/CAAI/rh-node/git/refs/heads/main version_rhnode.json
+RUN pip install git+https://github.com/CAAI/rh-node.git
+COPY nodes/manager /app
+WORKDIR /app
+
+CMD ["uvicorn", "manager:app", "--host", "0.0.0.0", "--port", "8000"]
