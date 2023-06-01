@@ -4,7 +4,7 @@ from pydantic import BaseModel
 import time
 import os
 from .common import *
-
+import json
 
 class RHJob:
     def __init__(
@@ -19,9 +19,13 @@ class RHJob:
         check_cache=True,
         save_to_cache=True,
         priority=2,
+        save_non_files=False,
     ):
+        self.save_non_files = save_non_files
         self.node_identifier = node_name
-        self.input_data = inputs.copy()
+
+        self.input_output_data = inputs.copy()
+
         self.job = JobMetaData(
             device=included_cuda_device,
             check_cache=check_cache,
@@ -147,11 +151,35 @@ class RHJob:
 
         print("Stopped", self.ID)
 
+    def _split_input_output_data(self, input_output_data):
+        input_data = {}
+        output_data = {}
+
+        url = f"http://{self.host}:{self.port}/{self.node_identifier}/keys"
+        response = requests.get(url)
+        response.raise_for_status()
+        keys = response.json()
+        input_keys = keys["input_keys"]
+        output_keys = keys["output_keys"]
+
+        for key, value in input_output_data.items():
+            if key in input_keys:
+                input_data[key] = value
+            elif key in output_keys:
+                output_data[key] = value
+            else:
+                raise Exception("Key not found in input or output keys")
+        return input_data, output_data
+
     def start(self):
         assert self.ID is None, "Already started"
 
         if not self.host:
             self.host, self.port = self._get_addr_for_job(self.node_identifier)
+
+        self.input_data, self.output_data = self._split_input_output_data(
+            self.input_output_data
+        )
 
         input_data = replace_paths_with_strings(self.input_data)
 
@@ -248,22 +276,37 @@ class RHJob:
                 time.sleep(4)
 
         for key, value in output.items():
-            if isinstance(value, str):
-                if "/download/" in value:
-                    print("Downloading", key, "...")
-                    url = f"http://{self.host}:{self.port}/{self.node_identifier}/jobs/{self.ID}/download/{key}"
+            if isinstance(value, str) and "/download/" in value:
+                print("Downloading", key, "...")
+                url = f"http://{self.host}:{self.port}/{self.node_identifier}/jobs/{self.ID}/download/{key}"
 
-                    response = requests.get(url)
-                    response.raise_for_status()
+                response = requests.get(url)
+                response.raise_for_status()
+
+                if not key in self.output_data.keys():
                     fname = (
                         response.headers["Content-Disposition"]
                         .split("=")[1]
                         .replace('"', "")
                     )
                     fname = Path(os.path.join(output_path, fname)).absolute()
-                    with open(fname, "wb") as f:
-                        f.write(response.content)
-                    output[key] = fname
+                else:
+                    fname = Path(self.output_data[key]).absolute()
+
+                with open(fname, "wb") as f:
+                    f.write(response.content)
+                output[key] = fname
+            elif key in self.output_data.keys():
+                fname = Path(self.output_data[key]).absolute()
+
+                with open(fname, "w") as f:
+                    f.write(str(value))
+
+            elif self.save_non_files:
+                fname = Path(os.path.join(output_path, key)).absolute()
+
+                with open(fname, "w") as f:
+                    f.write(str(value))
 
         return output
 

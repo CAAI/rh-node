@@ -18,6 +18,7 @@ from .email import EmailSender
 import datetime
 from fastapi import Request
 
+
 MANAGER_URL = "http://manager:8000/manager"
 
 
@@ -53,9 +54,9 @@ class RHNode(ABC, FastAPI):
         # Create variants of input and output spec for different stages of the job
         self.output_spec_url = create_filepath_as_string_model(self.output_spec)
         self.input_spec_no_file = create_model_no_files(self.input_spec)
-
+        validate_input_output_spec(self.input_spec, self.output_spec)
         # A list of the input keys of FilePath type.
-        self.file_keys = [
+        self.input_file_keys = [
             key
             for key, val in self.input_spec.__fields__.items()
             if val.type_ == FilePath
@@ -69,6 +70,52 @@ class RHNode(ABC, FastAPI):
         self.setup_api_routes()
         setup_frontend_routes(self)
 
+
+    def _delete_job(self, job_id):
+        pass
+        job = self.jobs[job_id]
+        job.delete_files()
+        del self.jobs[job_id]
+
+    def _get_expired_job_ids(self, max_age_hours=8):
+        """Get a list of job IDs that have been in the queue for longer than max_age_hours"""
+        expired_job_ids = []
+        for job_id, job in self.jobs.items():
+            if (time.time() - job.time_created) / 3600 > max_age_hours:
+                if job.status in [
+                    JobStatus.Finished,
+                    JobStatus.Error,
+                    JobStatus.Cancelled,
+                ]:
+                    expired_job_ids.append(job_id)
+
+        return expired_job_ids
+
+    async def _delete_expired_jobs_loop(
+        self, hour: int = 3, minute: int = 30, second: int = 0
+    ):
+        print("Starting daily task to delete expired jobs")
+        while True:
+            now = datetime.datetime.now()
+
+            # Set the time for the next task run
+            next_run = datetime.datetime.combine(
+                now.date(), datetime.time(hour, minute, second)
+            )
+
+            # If the time has already passed for today, schedule it for tomorrow
+            if now.time() > datetime.time(hour, minute, second):
+                next_run += datetime.timedelta(days=1)
+
+            delay = (next_run - now).total_seconds()
+            print("Next check in", delay, "seconds")
+            await asyncio.sleep(delay)
+            print("Checking for expired jobs...")
+            jobs = self._get_expired_job_ids()
+            for job_id in jobs:
+                print("Deleting job", job_id)
+                self._delete_job(job_id)
+                
     def get_job_by_id(self, job_id: str):
         try:
             return self.jobs[job_id]
@@ -211,6 +258,10 @@ class RHNode(ABC, FastAPI):
             return job.error
 
         @self.post(self._create_url("/jobs/{job_id}/stop"))
+        def _stop_task(job_id: str):
+            self.jobs[job_id].stop()
+            return "OK"
+          
         def _remove_task(job_id: str):
             job = self.get_job_by_id(job_id)
             if job.status not in [
@@ -222,6 +273,12 @@ class RHNode(ABC, FastAPI):
                 job.stop()
 
             return Response(status_code=204)
+
+         
+        @self.post(self._create_url("/jobs/{job_id}/delete"))
+        async def _delete_job(job_id: str):
+            """Delete a job from the node."""
+            self._delete_job(job_id)
 
         @self.get(self._create_url("/jobs/{job_id}/download/{filename}"))
         def _get_file(job_id, filename):
@@ -247,7 +304,14 @@ class RHNode(ABC, FastAPI):
 
         @self.get(self._create_url("/filename_keys"))
         async def _get_file_keys():
-            return self.file_keys
+            return self.input_file_keys
+
+        @self.get(self._create_url("/keys"))
+        async def _get_keys():
+            return {
+                "output_keys": list(self.output_spec.__fields__.keys()),
+                "input_keys": list(self.input_spec.__fields__.keys()),
+            }
 
         @self.post(self._create_url("/jobs/{job_id}/upload"))
         async def _upload(
@@ -291,6 +355,9 @@ class RHNode(ABC, FastAPI):
             return JSONResponse(
                 status_code=500, content={"code": 500, "msg": "Internal Server Error"}
             )
+        @self.on_event("startup")
+        async def start_cleaning_loop():
+            asyncio.create_task(self._delete_expired_jobs_loop())
 
     @classmethod
     def process_wrapper(cls, inputs, job, result_queue):

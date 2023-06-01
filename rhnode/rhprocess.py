@@ -81,17 +81,20 @@ class RHProcess:
                     os.rmdir(dir_path)
 
     def _remove_input_directory(self):
-        for file in os.listdir(self.input_directory):
-            fpath = Path(self.input_directory, file).absolute()
-            os.remove(fpath)
-        os.rmdir(self.input_directory)
+        if os.path.exists(self.input_directory):
+            for file in os.listdir(self.input_directory):
+                fpath = Path(self.input_directory, file).absolute()
+                os.remove(fpath)
+            os.rmdir(self.input_directory)
 
     def _remove_output_directory(self):
-        for file in os.listdir(self.output_directory):
-            fpath = Path(self.output_directory, file).absolute()
-            os.remove(fpath)
+        if os.path.exists(self.output_directory):
+            for root, dirs, files in os.walk(self.output_directory):
+                for file in files:
+                    fpath = Path(root, file).absolute()
+                    os.remove(fpath)
 
-        os.rmdir(self.output_directory)
+            os.rmdir(self.output_directory)
 
     def _make_input_directory(self):
         new_dir = os.path.join(self.input_directory)
@@ -167,10 +170,18 @@ class RHProcess:
         """
         new_d = {}
         output_dir = Path(self.output_directory)
-
+        existing_base_names = set()
         for key, val in response.dict(exclude_unset=True).items():
             if self.output_spec.__fields__[key].type_ == FilePath:
                 val = Path(val)
+                base_name = os.path.basename(val)
+                if base_name in existing_base_names:
+                    # TODO: This might be undesirable behaviour
+                    raise Exception(
+                        "Duplicate file basename in output! This is not allowed"
+                    )
+
+                existing_base_names.add(base_name)
 
                 if is_relative_to(val, output_dir):
                     new_d[key] = val
@@ -274,12 +285,18 @@ class RHProcess:
     def upload_file(self, file_key, in_filename):
         filename = create_file_name_from_key(file_key, in_filename)
         file_path = self.input_directory / filename
+
+        # TODO: this might be undesirable behaviour, but for now, it prevents
+        # Silently overwriting files with identical basenames
+        assert not os.path.isfile(file_path), "File upload error, file already exists"
+
         yield file_path
 
         assert os.path.isfile(file_path)
         self.input = self.input.copy(update={file_key: self.input_directory / filename})
 
-    def delete(self):
+    def delete_files(self):
+        self._remove_input_directory()
         self._remove_output_directory()
 
     def stop(self):
