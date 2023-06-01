@@ -4,8 +4,8 @@
 *.inputs
 *.outputs
 *.cache
-
-tests/data/
+tests/nodes/testnode_add/simple_debug.py
+tests/data/ 
 output/
 .vscode
 ### Python ###

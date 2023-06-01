@@ -79,11 +79,11 @@ def is_relative_to(a, b):
 
 def create_file_name_from_key(key_name, file_name):
     """Create a filename from the pydantic attribute name and a file ending"""
-    if "." in os.path.basename(file_name):
-        ending = os.path.basename(file_name).split(".")[1:]
-        ending = ".".join(ending)
-        return f"{key_name}.{ending}"
-    return key_name
+    # if "." in os.path.basename(file_name):
+    #     ending = os.path.basename(file_name).split(".")[1:]
+    #     ending = ".".join(ending)
+    #     return f"{key_name}.{ending}"
+    return os.path.basename(file_name)
 
 
 def create_filepath_as_string_model(cls: Type[BaseModel]) -> Type[BaseModel]:
@@ -123,3 +123,14 @@ def create_model_no_files(cls: Type[BaseModel]) -> Type[BaseModel]:
         else:
             fields[field_name] = (field.type_, field.field_info)
     return create_model(cls.__name__ + "INIT", **fields)
+
+
+def validate_input_output_spec(input_spec, output_spec):
+    input_keys = list(input_spec.__fields__.keys())
+    output_keys = list(output_spec.__fields__.keys())
+
+    combined = input_keys + output_keys
+    if len(combined) != len(set(combined)):
+        raise ValueError(
+            "Input spec and output spec must not have overlapping key names"
+        )

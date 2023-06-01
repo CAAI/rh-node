@@ -48,9 +48,9 @@ class RHNode(ABC, FastAPI):
         # Create variants of input and output spec for different stages of the job
         self.output_spec_url = create_filepath_as_string_model(self.output_spec)
         self.input_spec_no_file = create_model_no_files(self.input_spec)
-
+        validate_input_output_spec(self.input_spec, self.output_spec)
         # A list of the input keys of FilePath type.
-        self.file_keys = [
+        self.input_file_keys = [
             key
             for key, val in self.input_spec.__fields__.items()
             if val.type_ == FilePath
@@ -177,7 +177,14 @@ class RHNode(ABC, FastAPI):
 
         @self.get(self._create_url("/filename_keys"))
         async def _get_file_keys():
-            return self.file_keys
+            return self.input_file_keys
+
+        @self.get(self._create_url("/keys"))
+        async def _get_keys():
+            return {
+                "output_keys": list(self.output_spec.__fields__.keys()),
+                "input_keys": list(self.input_spec.__fields__.keys()),
+            }
 
         @self.post(self._create_url("/jobs/{job_id}/upload"))
         async def _upload(
@@ -186,7 +193,7 @@ class RHNode(ABC, FastAPI):
             key: str = Form(...),
         ):
             """Upload an input file to a job. The key must be one of the file keys."""
-            assert key in self.file_keys
+            assert key in self.input_file_keys
             job = self.jobs[job_id]
 
             # The outer with statement is to ensure that the file is validated after upload
