@@ -8,6 +8,7 @@ import json
 from requests.exceptions import HTTPError
 
 
+
 class RHJob:
     def __init__(
         self,
