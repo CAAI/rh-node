@@ -70,7 +70,6 @@ class RHNode(ABC, FastAPI):
         self.setup_api_routes()
         setup_frontend_routes(self)
 
-
     def _delete_job(self, job_id):
         pass
         job = self.jobs[job_id]
@@ -115,7 +114,7 @@ class RHNode(ABC, FastAPI):
             for job_id in jobs:
                 print("Deleting job", job_id)
                 self._delete_job(job_id)
-                
+
     def get_job_by_id(self, job_id: str):
         try:
             return self.jobs[job_id]
@@ -259,10 +258,6 @@ class RHNode(ABC, FastAPI):
 
         @self.post(self._create_url("/jobs/{job_id}/stop"))
         def _stop_task(job_id: str):
-            self.jobs[job_id].stop()
-            return "OK"
-          
-        def _remove_task(job_id: str):
             job = self.get_job_by_id(job_id)
             if job.status not in [
                 JobStatus.Finished,
@@ -271,13 +266,14 @@ class RHNode(ABC, FastAPI):
                 JobStatus.Error,
             ]:
                 job.stop()
+                return Response(status_code=204)
 
-            return Response(status_code=204)
+            return Response(status_code=200, content="Job is already in terminal phase")
 
-         
         @self.post(self._create_url("/jobs/{job_id}/delete"))
         async def _delete_job(job_id: str):
             """Delete a job from the node."""
+            job = self.get_job_by_id(job_id)
             self._delete_job(job_id)
 
         @self.get(self._create_url("/jobs/{job_id}/download/{filename}"))
@@ -320,7 +316,6 @@ class RHNode(ABC, FastAPI):
             except Exception as e:
                 return {"error": str(e)}
 
-
         @self.post(self._create_url("/jobs/{job_id}/upload"))
         async def _upload(
             job_id: str,
@@ -332,7 +327,7 @@ class RHNode(ABC, FastAPI):
 
             """Upload an input file to a job. The key must be one of the file keys."""
 
-            if not key in self.file_keys:
+            if not key in self.input_file_keys:
                 raise HTTPException(
                     status_code=404,
                     detail="The requested file key {} is invalid.".format(key),
@@ -363,6 +358,7 @@ class RHNode(ABC, FastAPI):
             return JSONResponse(
                 status_code=500, content={"code": 500, "msg": "Internal Server Error"}
             )
+
         @self.on_event("startup")
         async def start_cleaning_loop():
             asyncio.create_task(self._delete_expired_jobs_loop())
