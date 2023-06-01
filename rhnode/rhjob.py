@@ -4,7 +4,7 @@ from pydantic import BaseModel
 import time
 import os
 from .common import *
-
+import json
 
 class RHJob:
     def __init__(
@@ -31,6 +31,7 @@ class RHJob:
             assert isinstance(
                 inputs, dict
             ), "inputs must be a dict of arguments if not in _cli_mode"
+
 
         self.save_non_files = save_non_files
         self.node_identifier = node_name

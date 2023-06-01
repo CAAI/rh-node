@@ -7,11 +7,17 @@ import uuid
 from .cache import Cache
 from .rhjob import *
 from .common import *
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi import FastAPI, File, Form, UploadFile, BackgroundTasks
 from .rhprocess import RHProcess
 from .frontend import setup_frontend_routes
 import traceback
+from fastapi import Response
+from fastapi import HTTPException
+from .email import EmailSender
+import datetime
+from fastapi import Request
+
 
 MANAGER_URL = "http://manager:8000/manager"
 
@@ -56,14 +62,71 @@ class RHNode(ABC, FastAPI):
             if val.type_ == FilePath
         ]
 
+        if recipient := os.environ.get("RH_EMAIL_ON_ERROR"):
+            self.email_sender = EmailSender(recipient)
+        else:
+            self.email_sender = None
+
         self.setup_api_routes()
         setup_frontend_routes(self)
+
+
+    def _delete_job(self, job_id):
+        pass
+        job = self.jobs[job_id]
+        job.delete_files()
+        del self.jobs[job_id]
+
+    def _get_expired_job_ids(self, max_age_hours=8):
+        """Get a list of job IDs that have been in the queue for longer than max_age_hours"""
+        expired_job_ids = []
+        for job_id, job in self.jobs.items():
+            if (time.time() - job.time_created) / 3600 > max_age_hours:
+                if job.status in [
+                    JobStatus.Finished,
+                    JobStatus.Error,
+                    JobStatus.Cancelled,
+                ]:
+                    expired_job_ids.append(job_id)
+
+        return expired_job_ids
+
+    async def _delete_expired_jobs_loop(
+        self, hour: int = 3, minute: int = 30, second: int = 0
+    ):
+        print("Starting daily task to delete expired jobs")
+        while True:
+            now = datetime.datetime.now()
+
+            # Set the time for the next task run
+            next_run = datetime.datetime.combine(
+                now.date(), datetime.time(hour, minute, second)
+            )
+
+            # If the time has already passed for today, schedule it for tomorrow
+            if now.time() > datetime.time(hour, minute, second):
+                next_run += datetime.timedelta(days=1)
+
+            delay = (next_run - now).total_seconds()
+            print("Next check in", delay, "seconds")
+            await asyncio.sleep(delay)
+            print("Checking for expired jobs...")
+            jobs = self._get_expired_job_ids()
+            for job_id in jobs:
+                print("Deleting job", job_id)
+                self._delete_job(job_id)
+                
+    def get_job_by_id(self, job_id: str):
+        try:
+            return self.jobs[job_id]
+        except KeyError:
+            raise HTTPException(status_code=404, detail="Job not found")
 
     def CREATE_JOB(self, input_spec_no_file):
         """Create a job (named RHProcess as not to conflict with RHJob).
         See rhprocess.py for more details."""
-
         # Generate a unique ID for the job
+
         while (ID := str(uuid.uuid4())) in self.jobs.keys():
             continue
 
@@ -96,6 +159,7 @@ class RHNode(ABC, FastAPI):
         """Try to register the node with the manager. This is called at startup."""
 
         success = False
+        self.host_name = "Unknown"
         for _i in range(5):
             print("Trying to register with manager")
             try:
@@ -109,6 +173,13 @@ class RHNode(ABC, FastAPI):
                 )
                 response = requests.post(url, json=node.dict())
                 response.raise_for_status()
+
+                # If responsive, get the host name of the cluster (used for email notifications)
+                url = MANAGER_URL + "/host_name"
+                response = requests.get(url)
+                response.raise_for_status()
+                self.host_name = response.json()
+
                 success = True
                 break
             except:
@@ -125,7 +196,8 @@ class RHNode(ABC, FastAPI):
 
     def _get_output_with_download_links(self, job_id):
         """Get the output of a finished job, with download links for any FilePath fields."""
-        job = self.jobs[job_id]
+        job = self.get_job_by_id(job_id)
+        self._ensure_job_status(job.status, JobStatus.Finished)
         return self.output_spec_url(
             **{
                 key: self.url_path_for("_get_file", job_id=job_id, filename=key)
@@ -134,6 +206,20 @@ class RHNode(ABC, FastAPI):
                 for key, val in job.output.dict(exclude_unset=True).items()
             }
         )
+
+    def _ensure_job_status(self, status, valid_statuses):
+        """Ensure that the job status is valid for the requested action."""
+        if not isinstance(valid_statuses, list):
+            valid_statuses = [valid_statuses]
+        if not status in valid_statuses:
+            raise HTTPException(
+                status_code=400,
+                detail="""
+            The requested action is not valid for the current job status ({}). 
+            Valid statuses are: ({})""".format(
+                    status, ",".join(valid_statuses)
+                ),
+            )
 
     def setup_api_routes(self):
         """Setup the API routes for the node. See frontend.py for the frontend routes."""
@@ -145,15 +231,21 @@ class RHNode(ABC, FastAPI):
 
         @self.post(self._create_url("/jobs/{job_id}/start"))
         async def START_JOB(
-            job_id: str, job: JobMetaData, background_tasks: BackgroundTasks
-        ) -> str:
-            job_obj = self.jobs[job_id]
-            background_tasks.add_task(job_obj.run, job)
-            return "OK"
+            job_id: str, job_meta_data: JobMetaData, background_tasks: BackgroundTasks
+        ) -> Response:
+            job_obj = self.get_job_by_id(job_id)
+            self._ensure_job_status(job_obj.status, JobStatus.Preparing)
+            if not job_obj.is_ready_to_run():
+                raise HTTPException(
+                    status_code=400,
+                    detail="Job is not ready to run. Some files are likely missing.",
+                )
+            background_tasks.add_task(job_obj.run, job_meta_data)
+            return Response(status_code=204)
 
         @self.get(self._create_url("/jobs/{job_id}/status"))
         async def _get_job_status(job_id: str) -> JobStatus:
-            return self.jobs[job_id].status
+            return self.get_job_by_id(job_id).status
 
         @self.get(self._create_url("/jobs/{job_id}/data"))
         async def _get_job_data_download_urls(job_id: str) -> self.output_spec_url:
@@ -161,16 +253,51 @@ class RHNode(ABC, FastAPI):
 
         @self.get(self._create_url("/jobs/{job_id}/error"))
         def _get_job_error(job_id: str):
-            return self.jobs[job_id].error
+            job = self.get_job_by_id(job_id)
+            self._ensure_job_status(job.status, [JobStatus.Cancelled, JobStatus.Error])
+            return job.error
 
         @self.post(self._create_url("/jobs/{job_id}/stop"))
-        def _remove_task(job_id: str):
+        def _stop_task(job_id: str):
             self.jobs[job_id].stop()
             return "OK"
+          
+        def _remove_task(job_id: str):
+            job = self.get_job_by_id(job_id)
+            if job.status not in [
+                JobStatus.Finished,
+                JobStatus.Cancelled,
+                JobStatus.Cancelling,
+                JobStatus.Error,
+            ]:
+                job.stop()
+
+            return Response(status_code=204)
+
+         
+        @self.post(self._create_url("/jobs/{job_id}/delete"))
+        async def _delete_job(job_id: str):
+            """Delete a job from the node."""
+            self._delete_job(job_id)
 
         @self.get(self._create_url("/jobs/{job_id}/download/{filename}"))
         def _get_file(job_id, filename):
-            fname = self.jobs[job_id].output.dict()[filename]
+            job = self.get_job_by_id(job_id)
+            self._ensure_job_status(job.status, JobStatus.Finished)
+            if not filename in self.output_spec.__fields__:
+                raise HTTPException(
+                    status_code=404,
+                    detail="The requested file key {} is invalid.".format(filename),
+                )
+            try:
+                fname = job.output.dict()[filename]
+            except KeyError:
+                raise HTTPException(
+                    status_code=404,
+                    detail="The requested file corresponding to key {} could not be found.".format(
+                        filename
+                    ),
+                )
             return FileResponse(
                 fname, filename=create_file_name_from_key(filename, fname)
             )
@@ -193,22 +320,29 @@ class RHNode(ABC, FastAPI):
             except Exception as e:
                 return {"error": str(e)}
 
+
         @self.post(self._create_url("/jobs/{job_id}/upload"))
         async def _upload(
             job_id: str,
             file: UploadFile = File(...),
             key: str = Form(...),
         ):
-            """Upload an input file to a job. The key must be one of the file keys."""
-            assert key in self.input_file_keys
-            job = self.jobs[job_id]
+            job = self.get_job_by_id(job_id)
+            self._ensure_job_status(job.status, JobStatus.Preparing)
 
+            """Upload an input file to a job. The key must be one of the file keys."""
+
+            if not key in self.file_keys:
+                raise HTTPException(
+                    status_code=404,
+                    detail="The requested file key {} is invalid.".format(key),
+                )
             # The outer with statement is to ensure that the file is validated after upload
             with job.upload_file(key, file.filename) as fpath:
                 with open(fpath, "wb") as f:
                     f.write(await file.read())
 
-            return "OK"
+            return Response(status_code=204)
 
         ### OTHER
         @self.on_event("startup")
@@ -218,6 +352,20 @@ class RHNode(ABC, FastAPI):
             # if not os.environ.get("PYTEST", False):
             multiprocessing.set_start_method("spawn")
             asyncio.create_task(self._register_with_manager())
+
+        @self.exception_handler(500)
+        async def internal_exception_handler(request: Request, exc: Exception):
+            if self.email_sender:
+                self.email_sender.send_email_exception(
+                    self.name, self.host_name, datetime.datetime.now()
+                )
+
+            return JSONResponse(
+                status_code=500, content={"code": 500, "msg": "Internal Server Error"}
+            )
+        @self.on_event("startup")
+        async def start_cleaning_loop():
+            asyncio.create_task(self._delete_expired_jobs_loop())
 
     @classmethod
     def process_wrapper(cls, inputs, job, result_queue):

@@ -1,5 +1,5 @@
-See the [contributing section](/docs/contributing.md) for steps, if you wish to make changes to the core of RHNode. 
-
+See the [contributing section](/docs/contributing.md) if you wish to make changes to RHNode. 
+See [this guide](docs/docker_and_ssh.md) if you are experiencing problems with ssh after docker installation. 
 See [rh-library](https://github.com/CAAI/rh-library) for nodes in production. 
 
 # Getting Started with RHNode Library
