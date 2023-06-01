@@ -27,5 +27,5 @@ jobs:
         with:
           file: nodes/manager/Dockerfile.dev
           push: true
-          tags: rhnode/manager:test_${{ github.event.release.tag_name }}
+          tags: rhnode/manager:${{ github.event.release.tag_name }}
           
