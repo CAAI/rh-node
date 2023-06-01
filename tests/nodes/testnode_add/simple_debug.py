@@ -1,6 +1,5 @@
 from rhnode import RHJob
 
-
 # NOTE: manager_adress and host/port are mutually exclusive.
 
 data = {
@@ -19,10 +18,9 @@ node = RHJob(
     node_address="localhost:8009",
     # port="9050",
     node_address="localhost:8009",
+    output_directory=".temp_output",
+    save_non_files=True,
     check_cache=False,
 )
 node.start()
 output = node.wait_for_finish()
-
-# Alternatively to interrupt the job:
-# node.stop()

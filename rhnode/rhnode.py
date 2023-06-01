@@ -313,6 +313,14 @@ class RHNode(ABC, FastAPI):
                 "input_keys": list(self.input_spec.__fields__.keys()),
             }
 
+        @self.post(self._create_url("/parse_cli"))
+        async def _parse_cli_args(cli: list):
+            try:
+                return self.parse_cli_args(cli)
+            except Exception as e:
+                return {"error": str(e)}
+
+
         @self.post(self._create_url("/jobs/{job_id}/upload"))
         async def _upload(
             job_id: str,
@@ -323,12 +331,12 @@ class RHNode(ABC, FastAPI):
             self._ensure_job_status(job.status, JobStatus.Preparing)
 
             """Upload an input file to a job. The key must be one of the file keys."""
+
             if not key in self.file_keys:
                 raise HTTPException(
                     status_code=404,
                     detail="The requested file key {} is invalid.".format(key),
                 )
-
             # The outer with statement is to ensure that the file is validated after upload
             with job.upload_file(key, file.filename) as fpath:
                 with open(fpath, "wb") as f:
@@ -373,3 +381,44 @@ class RHNode(ABC, FastAPI):
     @abstractmethod
     def process(inputs, job):
         pass
+
+    def parse_cli_args(self, args):
+        """Parse the inputs to the process function. This is called before the process function is called.
+        It is possible to override this function to change how the inputs are parsed.
+        """
+        input_output_dict = {}
+
+        for inp in args:
+            assert "=" in inp, "Inputs must be of the form key=value"
+            key, val = inp.split("=")
+            assert key not in input_output_dict, f"Key {key} appears twice in inputs"
+            if key in self.input_spec.__fields__:
+                val_type = self.input_spec.__fields__[key].type_
+
+            elif key in self.output_spec.__fields__:
+                val_type = self.output_spec.__fields__[key].type_
+            else:
+                raise ValueError(f"Key {key} not found in input or output spec")
+
+            input_output_dict[key] = convert_string_to_type(val, val_type)
+
+        return input_output_dict
+
+
+def convert_string_to_type(text, type_):
+    """Convert a string to a type. This is used to parse the inputs to the process function."""
+    if type_ == str or type_ == FilePath:
+        return text
+    elif type_ == bool:
+        return text_to_bool(text)
+    else:
+        return type_(text)
+
+
+def text_to_bool(value):
+    if value.lower() in ("yes", "true", "t", "y", "1"):
+        return True
+    elif value.lower() in ("no", "false", "f", "n", "0"):
+        return False
+    else:
+        raise ValueError(f"Could not convert {value} to bool")
