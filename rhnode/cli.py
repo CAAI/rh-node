@@ -46,7 +46,7 @@ def main():
     parser.add_argument(
         "node_args",
         nargs=argparse.REMAINDER,
-        help="The arguments for the job in the form arg1=val1 arg2=val2",
+        help="The arguments for the job in the form arg1=val1 arg2=val2. Run 'rhjob [args] [node_name] -h' for help on the input and output fields of the node",
     )
 
     args = parser.parse_args()
@@ -69,8 +69,11 @@ def main():
         _cli_mode=True,
     )
 
-    job.start()
-    job.wait_for_finish()
+    if len(args.node_args) == 1 and args.node_args[0] in ["-h", "--help"]:
+        job.print_cli_help()
+    else:
+        job.start()
+        job.wait_for_finish()
 
 
 if __name__ == "__main__":

@@ -53,6 +53,7 @@ class RHNode(ABC, FastAPI):
 
         # Create variants of input and output spec for different stages of the job
         self.output_spec_url = create_filepath_as_string_model(self.output_spec)
+        self.input_spec_str = create_filepath_as_string_model(self.input_spec)
         self.input_spec_no_file = create_model_no_files(self.input_spec)
         validate_input_output_spec(self.input_spec, self.output_spec)
         # A list of the input keys of FilePath type.
@@ -309,12 +310,16 @@ class RHNode(ABC, FastAPI):
                 "input_keys": list(self.input_spec.__fields__.keys()),
             }
 
-        @self.post(self._create_url("/parse_cli"))
+        @self.post(self._create_url("/cli/parse"))
         async def _parse_cli_args(cli: list):
             try:
                 return self.parse_cli_args(cli)
             except Exception as e:
-                return {"error": str(e)}
+                raise HTTPException(status_code=400, detail=str(e))
+
+        @self.get(self._create_url("/cli/help"))
+        async def _get_job_input():
+            return self.help_cli_args()
 
         @self.post(self._create_url("/jobs/{job_id}/upload"))
         async def _upload(
@@ -383,22 +388,37 @@ class RHNode(ABC, FastAPI):
         It is possible to override this function to change how the inputs are parsed.
         """
         input_output_dict = {}
-
+        input_dict = {}
         for inp in args:
             assert "=" in inp, "Inputs must be of the form key=value"
             key, val = inp.split("=")
             assert key not in input_output_dict, f"Key {key} appears twice in inputs"
             if key in self.input_spec.__fields__:
                 val_type = self.input_spec.__fields__[key].type_
+                input_dict[key] = convert_string_to_type(val, val_type)
 
             elif key in self.output_spec.__fields__:
                 val_type = self.output_spec.__fields__[key].type_
             else:
-                raise ValueError(f"Key {key} not found in input or output spec")
+                raise ValueError(f"Key [{key}] not found in input or output spec")
 
             input_output_dict[key] = convert_string_to_type(val, val_type)
 
+        ## just a check to make sure all needed input keys are present
+        self.input_spec_str(**input_dict)
+
         return input_output_dict
+
+    def help_cli_args(self):
+        help_string = f"==== {self.name} HELP ====\n"
+        help_string += f"Example: 'rhnode [args] {self.name} input_key1=val1 input_key2=val2 output_key1=val3'\n"
+        help_string += f"Input keys:\n"
+        for key, val in self.input_spec.__fields__.items():
+            help_string += f"\t{key}: {val.type_.__name__}\n"
+        help_string += f"Output keys:\n"
+        for key, val in self.output_spec.__fields__.items():
+            help_string += f"\t{key}: {val.type_.__name__}\n"
+        return help_string
 
 
 def convert_string_to_type(text, type_):
