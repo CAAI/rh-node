@@ -25,7 +25,7 @@ jobs:
         name: Build and push
         uses: docker/build-push-action@v4
         with:
-          file: nodes/manager/Dockerfile.dev
+          file: nodes/manager/Dockerfile
           push: true
           tags: rhnode/manager:${{ github.event.release.tag_name }}
           

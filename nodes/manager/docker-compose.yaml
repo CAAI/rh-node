@@ -16,10 +16,9 @@ services:
   
   #Queue Node
   manager:
-    image: rhnode/manager:1.0.0
     build: 
       context: ../../
-      dockerfile: nodes/manager/Dockerfile.prod
+      dockerfile: nodes/manager/Dockerfile
 
     expose:
     - "8000"
