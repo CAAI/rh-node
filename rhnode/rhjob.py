@@ -6,6 +6,7 @@ import os
 from .common import *
 import json
 
+
 class RHJob:
     def __init__(
         self,
@@ -31,7 +32,6 @@ class RHJob:
             assert isinstance(
                 inputs, dict
             ), "inputs must be a dict of arguments if not in _cli_mode"
-
 
         self.save_non_files = save_non_files
         self.node_identifier = node_name
@@ -68,6 +68,7 @@ class RHJob:
                 options = [
                     ("manager", "8000"),
                     ("localhost", "9050"),
+                    ("titan6", "9050"),
                 ]
                 self.manager_host, self.manager_port = self.select_manager_endpoint(
                     options
