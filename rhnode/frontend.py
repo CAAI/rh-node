@@ -31,6 +31,8 @@ def setup_frontend_routes(rhnode):
     def _get_default_context():
         return {
             "node_name": rhnode.name,
+            "rhnode_version": rhnode.rhnode_version,
+            "rhnode_mode": rhnode.rhnode_mode,
         }
 
     @rhnode.get(rhnode._create_url(""), response_class=HTMLResponse)

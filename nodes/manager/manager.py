@@ -8,6 +8,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.templating import Jinja2Templates
 from rhnode.common import QueueRequest, NodeMetaData
 from dotenv import load_dotenv
+from rhnode.version import __version__
 
 # load env variables from .env file if it exists
 load_dotenv()
@@ -332,6 +333,8 @@ class RHManager(FastAPI):
                     "memory_max": available_resources["memory_max"],
                     "memory_available": available_resources["memory_available"],
                     "nodes": nodes,
+                    "rhnode_version": __version__,
+                    "rhnode_mode": os.environ.get("RH_MODE", ""),
                 },
             )
 

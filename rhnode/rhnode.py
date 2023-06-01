@@ -17,7 +17,7 @@ from fastapi import HTTPException
 from .email import EmailSender
 import datetime
 from fastapi import Request
-
+from .version import __version__
 
 MANAGER_URL = "http://manager:8000/manager"
 
@@ -50,6 +50,8 @@ class RHNode(ABC, FastAPI):
 
         # Effectively the "database" of the node
         self.jobs = {}
+        self.rhnode_version = __version__
+        self.rhnode_mode = os.environ.get("RH_MODE", "")
 
         # Create variants of input and output spec for different stages of the job
         self.output_spec_url = create_filepath_as_string_model(self.output_spec)
