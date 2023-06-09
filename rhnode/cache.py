@@ -42,7 +42,7 @@ class Cache:
         hashes = ""
         for key, val in inputs.dict(exclude_unset=False).items():
             if self.input_spec.__fields__[key].type_ == FilePath and val is not None:
-                _calculate_file_hash(val)
+                hashes += _calculate_file_hash(val)
             else:
                 hashes += hashlib.sha256(str(val).encode()).hexdigest()
 
