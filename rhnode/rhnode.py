@@ -298,11 +298,7 @@ class RHNode(ABC, FastAPI):
                     detail="The requested file corresponding to key {} could not be found.".format(
                         filename
                     ),
-                )
-            if fname is None:
-                # Output files can be optional, return code 204 No Content.
-                return Response(status_code=204)
-            
+                )           
             return FileResponse(
                 fname, filename=create_file_name_from_key(filename, fname)
             )
