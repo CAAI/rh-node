@@ -304,11 +304,7 @@ class RHJob:
                 response = requests.get(url)
                 response.raise_for_status()
 
-                if not key in self.output_data.keys() and response.status_code==204:
-                    # No file found to download. Assuming optional FilePath was used. Should be checked?
-                    output[key] = None
-                    continue
-                elif not key in self.output_data.keys():
+                if not key in self.output_data.keys():
                     fname = (
                         response.headers["Content-Disposition"]
                         .split("=")[1]
