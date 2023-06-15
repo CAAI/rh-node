@@ -55,6 +55,7 @@ class Cache:
         cache_json = os.path.join(self.cache_directory, cache_key, CACHE_JSON_FNAME)
         outputs = self.output_spec.parse_file(cache_json)
         for key, val in outputs.dict(exclude_unset=True).items():
+            print(key, val)
             if self.output_spec.__fields__[key].type_ == FilePath and val is not None: # Added none for support for optional FilePath
                 assert os.path.exists(
                     val
