@@ -111,3 +111,61 @@ def test_optional_input_6(tmp_path):
 
     # Cleanup
     shutil.rmtree(optional, ignore_errors=True)
+
+def test_optional_input_cached_1(tmp_path):
+    data = {
+        'return_output_file': False
+    }
+    optional = 'optional'
+
+    job = RHJob(node_name="optional", inputs=data, output_directory=optional)
+    job.start()
+    output = job.wait_for_finish()
+
+    assert not os.path.exists(optional)
+    assert output['out_file'] is None
+
+    # Now call again but this time expect a file
+    data = {
+        'in_file': NII_FILE,
+    }
+    optional = 'optional'
+
+    job = RHJob(node_name="optional", inputs=data, output_directory=optional)
+    job.start()
+    output = job.wait_for_finish()
+
+    assert os.path.exists(optional)
+    assert output['out_file'] == (Path(optional) / "image.nii.gz").absolute()
+
+    # Cleanup
+    shutil.rmtree(optional, ignore_errors=True)
+
+def test_optional_input_cached_2(tmp_path):
+    data = {
+        'in_file': NII_FILE,
+    }
+    optional = 'optional'
+
+    job = RHJob(node_name="optional", inputs=data, output_directory=optional)
+    job.start()
+    output = job.wait_for_finish()
+
+    assert os.path.exists(optional)
+    assert output['out_file'] == (Path(optional) / "image.nii.gz").absolute()
+
+    # Cleanup
+    shutil.rmtree(optional, ignore_errors=True)
+
+    # Now call again but this time do not expect a file
+    data = {
+        'return_output_file': False
+    }
+    optional = 'optional'
+
+    job = RHJob(node_name="optional", inputs=data, output_directory=optional)
+    job.start()
+    output = job.wait_for_finish()
+
+    assert not os.path.exists(optional)
+    assert output['out_file'] is None
