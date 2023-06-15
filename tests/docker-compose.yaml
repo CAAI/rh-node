@@ -74,3 +74,17 @@ services:
     environment:
       #RH_EMAIL_ON_ERROR: claes.noehr.ladefoged@regionh.dk
       TZ: "Europe/Copenhagen"
+
+  ## Testnode: Optional     
+  optional:
+    #image: rhnode/optional:latest
+    build: 
+      context: ../
+      dockerfile: tests/nodes/testnode_optional/Dockerfile
+    expose:
+      - "8000"
+    labels:
+      - "traefik.http.routers.optional.rule=PathPrefix(`/optional`)"
+    environment:
+      #RH_EMAIL_ON_ERROR: claes.noehr.ladefoged@regionh.dk
+      TZ: "Europe/Copenhagen"
