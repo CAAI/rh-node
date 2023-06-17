@@ -3,14 +3,14 @@
 ### Steps
 1. Create/checkout the development branch of the next version, following the version scheme below (e.g. `dev/1.2.0`). 
 
-  If branch exists on github, make sure to pull latest changes: `git pull`
+   If branch exists on github, make sure to pull latest changes: `git pull`
 2. Add your changes
 3. Add pytest functions under tests to check any added functionality
 4. On one terminal, run `docker compose up --build`
 
-  On another terminal run `cd tests; pytest <test_YOURTESTFILE.py>` to run your added tests only, or `cd tests; pytest` to run all tests
+   On another terminal run `cd tests; pytest <test_YOURTESTFILE.py>` to run your added tests only, or `cd tests; pytest` to run all tests
 5. Commit and push changes to github
-6. **Optional** If you wish to make the changes available to rh-library nodes, then create release with tag following the versioning below (e.g. `dev/1.2.0-a.2` if -a.1 was the last alpha release). The docker image will be build and pushed to docker hub.
+6. **[Optional]** If you wish to make the changes available to rh-library nodes, then create release with tag following the versioning below (e.g. `dev/1.2.0-a.2` if -a.1 was the last alpha release). The docker image will be build and pushed to docker hub.
 
 ### Versioning
 Version naming follows `major.minor.patch` where each new release has an increment to minor version, and any release with smaller bugfixes an increment to patch version. New functions are implemented in the next versions dev branch and releases are tagged with with `-a.X` where X is a running counter. 
