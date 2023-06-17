@@ -6,17 +6,16 @@
 ## 4 run pytest
 ## (5 check terminal with docker images that nothing breaks)
 
-
-## Make sure you have the file "tests/data/mr.nii.gz". This can be any nifti file.
-NII_FILE = "tests/data/mr.nii.gz"
-if not os.path.exists(NII_FILE_2 := "tests/data/mr2.nii.gz"):
-    shutil.copyfile(NII_FILE, NII_FILE_2)
-
 import pytest
 from rhnode import RHJob
 import os
 import shutil
 from pathlib import Path
+
+## Make sure you have the file "tests/data/mr.nii.gz". This can be any nifti file.
+NII_FILE = "tests/data/mr.nii.gz"
+if not os.path.exists(NII_FILE_2 := "tests/data/mr2.nii.gz"):
+    shutil.copyfile(NII_FILE, NII_FILE_2)
 
 def test_optional_input_1(tmp_path):
     data = {
