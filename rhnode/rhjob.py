@@ -229,7 +229,7 @@ class RHJob:
         self.ID = response.json()
 
         ## Upload the files
-
+        data = {}
         for key, value in input_data_files.items():
             url = f"http://{self.host}:{self.port}/{self.node_identifier}/jobs/{self.ID}/upload"
             with open(value, "rb") as f:
@@ -240,7 +240,7 @@ class RHJob:
                     value,
                 )
                 files = {"file": f}
-                data = {"key": key}
+                data["key"] = key
                 response = requests.post(url, files=files, data=data)
                 response.raise_for_status()
 
@@ -268,11 +268,8 @@ class RHJob:
         assert self.ID is not None, "Not started"
         if self.strict_output_dir:
             output_path = self.output_directory
-            self._maybe_make_output_directory(output_path)
         else:
-            output_path = _create_output_directory(
-                self.output_directory, self.node_identifier
-            )
+            output_path = _create_output_directory_name(self.output_directory, self.node_identifier)
 
         output = None
         while output is None:
@@ -313,6 +310,7 @@ class RHJob:
                         .split("=")[1]
                         .replace('"', "")
                     )
+                    self._maybe_make_output_directory(output_path)
                     fname = Path(os.path.join(output_path, fname)).absolute()
                 else:
                     fname = Path(self.output_data[key]).absolute()
@@ -328,6 +326,7 @@ class RHJob:
                     f.write(str(value))
 
             elif self.save_non_files:
+                self._maybe_make_output_directory(output_path)
                 fname = Path(os.path.join(output_path, key)).absolute()
 
                 with open(fname, "w") as f:

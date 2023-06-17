@@ -55,7 +55,7 @@ class Cache:
         cache_json = os.path.join(self.cache_directory, cache_key, CACHE_JSON_FNAME)
         outputs = self.output_spec.parse_file(cache_json)
         for key, val in outputs.dict(exclude_unset=True).items():
-            if self.output_spec.__fields__[key].type_ == FilePath:
+            if self.output_spec.__fields__[key].type_ == FilePath and val is not None: # Added none for support for optional FilePath
                 assert os.path.exists(
                     val
                 ), f"Broken cache {cache_key}, missing file: {val}"
@@ -63,7 +63,7 @@ class Cache:
     def _change_root_response(self, response_json, prev_root, new_root):
         _response_dict = {}
         for key, val in response_json.dict(exclude_unset=True).items():
-            if self.output_spec.__fields__[key].type_ == FilePath:
+            if self.output_spec.__fields__[key].type_ == FilePath and val is not None: # Added none for support for optional FilePath
                 relative_path = val.relative_to(prev_root)
                 _response_dict[key] = new_root / relative_path
             else:

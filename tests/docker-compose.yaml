@@ -49,7 +49,7 @@ services:
 
   ## Testnode: Add     
   add:
-    image: rhnode/add:latest
+    #image: rhnode/add:latest
     build: 
       context: ../
       dockerfile: tests/nodes/testnode_add/Dockerfile
@@ -59,4 +59,32 @@ services:
       - "traefik.http.routers.add.rule=PathPrefix(`/add`)"
     environment:
       RH_EMAIL_ON_ERROR: christian.hinge@regionh.dk
+      TZ: "Europe/Copenhagen"
+
+  ## Testnode: OutputDirectory     
+  outputdirectory:
+    #image: rhnode/outputdirectory:latest
+    build: 
+      context: ../
+      dockerfile: tests/nodes/testnode_outputdirectory/Dockerfile
+    expose:
+      - "8000"
+    labels:
+      - "traefik.http.routers.outputdirectory.rule=PathPrefix(`/outputdirectory`)"
+    environment:
+      #RH_EMAIL_ON_ERROR: claes.noehr.ladefoged@regionh.dk
+      TZ: "Europe/Copenhagen"
+
+  ## Testnode: Optional     
+  optional:
+    #image: rhnode/optional:latest
+    build: 
+      context: ../
+      dockerfile: tests/nodes/testnode_optional/Dockerfile
+    expose:
+      - "8000"
+    labels:
+      - "traefik.http.routers.optional.rule=PathPrefix(`/optional`)"
+    environment:
+      #RH_EMAIL_ON_ERROR: claes.noehr.ladefoged@regionh.dk
       TZ: "Europe/Copenhagen"

@@ -206,6 +206,8 @@ class RHNode(ABC, FastAPI):
                 if self.output_spec.__fields__[key].type_ == FilePath
                 else val
                 for key, val in job.output.dict(exclude_unset=True).items()
+                # Only return links for non FilePath and FilePath with values that are not None unless required
+                if not self.output_spec.__fields__[key].type_ == FilePath or val is not None or (val is None and self.output_spec.__fields__[key].required)
             }
         )
 
@@ -296,7 +298,7 @@ class RHNode(ABC, FastAPI):
                     detail="The requested file corresponding to key {} could not be found.".format(
                         filename
                     ),
-                )
+                )           
             return FileResponse(
                 fname, filename=create_file_name_from_key(filename, fname)
             )
