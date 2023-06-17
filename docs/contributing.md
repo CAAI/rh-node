@@ -6,9 +6,10 @@
    If branch exists on github, make sure to pull latest changes: `git pull`
 2. Add your changes
 3. Add pytest functions under tests to check any added functionality
-4. On one terminal, run `docker compose up --build`
+4. Make sure you create a file under tests/data/mr.nii.gz
+5. On one terminal, in the `tests` dir, run `docker compose up --build`
 
-   On another terminal run `cd tests; pytest <test_YOURTESTFILE.py>` to run your added tests only, or `cd tests; pytest` to run all tests
+   On another terminal run `pytest <test_YOURTESTFILE.py>` to run your added tests only, or `pytest` to run all tests
 5. Commit and push changes to github
 6. **[Optional]** If you wish to make the changes available to rh-library nodes, then create release with tag following the versioning below (e.g. `dev/1.2.0-a.2` if -a.1 was the last alpha release). The docker image will be build and pushed to docker hub.
 
