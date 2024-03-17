@@ -154,6 +154,46 @@ class ResourceQueue:
             )
         return active_jobs_info
 
+    def get_queued_jobs_info(self):
+        return {
+            "queued_jobs": [
+                {
+                    "priority": job[0] * -1,
+                    "job_id": job[1],
+                    "required_gpu_mem": job[2],
+                    "required_threads": job[3],
+                    "required_memory": job[4],
+                }
+                for job in self.job_queue
+            ]
+        }
+
+    def get_load(self):
+        active_jobs_info = self.get_active_jobs_info()
+        queued_jobs_info = self.get_queued_jobs_info()["queued_jobs"]
+        sum_gpu_mem = (
+            sum(self.gpu_devices_mem_available)
+            if isinstance(self.gpu_devices_mem_available, list)
+            else self.gpu_devices_mem_available
+        )
+        tot_required_gpu_mem = sum(
+            x["required_gpu_mem"] for x in active_jobs_info + queued_jobs_info
+        )
+        tot_required_mem = sum(
+            x["required_memory"] for x in active_jobs_info + queued_jobs_info
+        )
+        tot_required_threads = sum(
+            x["required_threads"] for x in active_jobs_info + queued_jobs_info
+        )
+
+        load = max(
+            tot_required_gpu_mem / sum_gpu_mem,
+            tot_required_mem / self.memory_max,
+            tot_required_threads / self.threads_max,
+        )
+
+        return load
+
 
 templates = Jinja2Templates(
     directory=os.path.dirname(__file__) + "/resources/templates"
@@ -194,15 +234,28 @@ class RHManager(FastAPI):
         if node_name in self.nodes.keys():
             return "localhost:8000"
 
+        lowest_load = None
+        addr_with_lowest_load = None
         # query other hosts for available gpu
         for addr in self.other_addrs:
             url = f"http://{addr}/manager/dispatcher/has_node/{node_name}"
             response = requests.get(url)
             response.raise_for_status()
             has_node = response.json()
+            assert isinstance(has_node, bool)
             if has_node:
-                return addr
-        raise Exception("No servers were found with the node")
+                url = f"http://{addr}/manager/get_load"
+                response = requests.get(url)
+                response.raise_for_status()
+                node_load = response.json()
+                if lowest_load == None or node_load < lowest_load:
+                    lowest_load = node_load
+                    addr_with_lowest_load = addr
+
+        if addr_with_lowest_load is not None:
+            return addr_with_lowest_load
+        else:
+            raise Exception("No servers were found with the node")
 
     def setup_routes(self):
         @self.post("/manager/register_node")
@@ -251,18 +304,11 @@ class RHManager(FastAPI):
 
         @self.get("/manager/get_queued_jobs")
         async def get_queued_jobs():
-            return {
-                "queued_jobs": [
-                    {
-                        "priority": job[0] * -1,
-                        "job_id": job[1],
-                        "required_gpu_mem": job[2],
-                        "required_threads": job[3],
-                        "required_memory": job[4],
-                    }
-                    for job in self.queue.job_queue
-                ]
-            }
+            self.queue.get_queued_jobs_info()
+
+        @self.get("/manager/get_load")
+        async def get_load():
+            return self.queue.get_load()
 
         @self.get("/manager/get_resource_info")
         async def get_resource_info():
