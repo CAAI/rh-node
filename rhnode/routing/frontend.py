@@ -1,14 +1,18 @@
 import os
 from fastapi.staticfiles import StaticFiles
-from .rhjob import JobStatus
+from ..rhjob import JobStatus
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi import Request
 from jinja2 import Environment, FileSystemLoader
-from .common import *
+from ..common import *
 import datetime
 
-_TEMPLATES_DIRECTORY = os.path.dirname(__file__) + "/resources/templates"
-_STATIC_FILES_DIRECTORY = os.path.dirname(__file__) + "/resources/static"
+_TEMPLATES_DIRECTORY = (
+    os.path.dirname(os.path.dirname(__file__)) + "/resources/templates"
+)
+_STATIC_FILES_DIRECTORY = (
+    os.path.dirname(os.path.dirname(__file__)) + "/resources/static"
+)
 
 
 def setup_frontend_routes(rhnode):

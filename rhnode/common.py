@@ -134,3 +134,22 @@ def validate_input_output_spec(input_spec, output_spec):
         raise ValueError(
             "Input spec and output spec must not have overlapping key names"
         )
+
+
+def convert_string_to_type(text, type_):
+    """Convert a string to a type. This is used to parse the inputs to the process function."""
+    if type_ == str or type_ == FilePath:
+        return text
+    elif type_ == bool:
+        return text_to_bool(text)
+    else:
+        return type_(text)
+
+
+def text_to_bool(value):
+    if value.lower() in ("yes", "true", "t", "y", "1"):
+        return True
+    elif value.lower() in ("no", "false", "f", "n", "0"):
+        return False
+    else:
+        raise ValueError(f"Could not convert {value} to bool")

@@ -8,7 +8,6 @@ import json
 from requests.exceptions import HTTPError
 
 
-
 class RHJob:
     def __init__(
         self,
@@ -269,7 +268,9 @@ class RHJob:
         if self.strict_output_dir:
             output_path = self.output_directory
         else:
-            output_path = _create_output_directory_name(self.output_directory, self.node_identifier)
+            output_path = _create_output_directory_name(
+                self.output_directory, self.node_identifier
+            )
 
         output = None
         while output is None:
