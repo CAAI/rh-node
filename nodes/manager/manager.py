@@ -172,9 +172,9 @@ class ResourceQueue:
         active_jobs_info = self.get_active_jobs_info()
         queued_jobs_info = self.get_queued_jobs_info()["queued_jobs"]
         sum_gpu_mem = (
-            sum(self.gpu_devices_mem_available)
-            if isinstance(self.gpu_devices_mem_available, list)
-            else self.gpu_devices_mem_available
+            sum(self.gpu_devices_mem_max)
+            if isinstance(self.gpu_devices_mem_max, list)
+            else self.gpu_devices_mem_max
         )
         tot_required_gpu_mem = sum(
             x["required_gpu_mem"] for x in active_jobs_info + queued_jobs_info
