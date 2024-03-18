@@ -232,10 +232,12 @@ class RHManager(FastAPI):
         # return node_name
 
         if node_name in self.nodes.keys():
-            return "localhost:8000"
+            lowest_load = self.queue.get_load()
+            addr_with_lowest_load = "localhost:8000"
+        else:
+            lowest_load = None
+            addr_with_lowest_load = None
 
-        lowest_load = None
-        addr_with_lowest_load = None
         # query other hosts for available gpu
         for addr in self.other_addrs:
             url = f"http://{addr}/manager/dispatcher/has_node/{node_name}"
