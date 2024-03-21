@@ -9,6 +9,7 @@ from fastapi.templating import Jinja2Templates
 from rhnode.common import QueueRequest, NodeMetaData
 from dotenv import load_dotenv
 from rhnode.version import __version__
+import time
 
 # load env variables from .env file if it exists
 load_dotenv()
@@ -38,16 +39,23 @@ class ResourceQueue:
             or required_memory > self.memory_max
         ):
             raise ValueError("Job requirements exceed available resources.")
-
         heapq.heappush(
             self.job_queue,
-            (-priority, job_id, required_gpu_mem, required_threads, required_memory),
+            (
+                -priority,
+                time.time(),
+                job_id,
+                required_gpu_mem,
+                required_threads,
+                required_memory,
+            ),
         )
         self.process_queue()
 
     def process_queue(self):
         while self.job_queue:
             (
+                _,
                 _,
                 job_id,
                 required_gpu_mem,
@@ -155,22 +163,20 @@ class ResourceQueue:
         return active_jobs_info
 
     def get_queued_jobs_info(self):
-        return {
-            "queued_jobs": [
-                {
-                    "priority": job[0] * -1,
-                    "job_id": job[1],
-                    "required_gpu_mem": job[2],
-                    "required_threads": job[3],
-                    "required_memory": job[4],
-                }
-                for job in self.job_queue
-            ]
-        }
+        return [
+            {
+                "priority": job[0] * -1,
+                "job_id": job[1],
+                "required_gpu_mem": job[2],
+                "required_threads": job[3],
+                "required_memory": job[4],
+            }
+            for job in self.job_queue
+        ]
 
     def get_load(self):
         active_jobs_info = self.get_active_jobs_info()
-        queued_jobs_info = self.get_queued_jobs_info()["queued_jobs"]
+        queued_jobs_info = self.get_queued_jobs_info()
         sum_gpu_mem = (
             sum(self.gpu_devices_mem_max)
             if isinstance(self.gpu_devices_mem_max, list)
@@ -331,16 +337,7 @@ class RHManager(FastAPI):
         @self.get("/manager")
         async def resource_queue(request: Request):
             active_jobs = self.queue.get_active_jobs_info()
-            queued_jobs = [
-                {
-                    "priority": job[0] * -1,
-                    "job_id": job[1],
-                    "required_gpu_mem": job[2],
-                    "required_threads": job[3],
-                    "required_memory": job[4],
-                }
-                for job in self.queue.job_queue
-            ]
+            queued_jobs = self.queue.get_queued_jobs_info()
             available_resources = self.queue.get_resource_info()
 
             for active_job in active_jobs:

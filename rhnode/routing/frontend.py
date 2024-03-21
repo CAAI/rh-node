@@ -45,24 +45,33 @@ def setup_frontend_routes(rhnode):
         template = env.get_template("index.html")
         formats = []
 
-        sorted_jobs = sorted(rhnode.jobs.items(), key=lambda kv: -kv[1].time_created)
+        sorted_jobs = sorted(rhnode.jobs.items(), key=lambda kv: kv[1].time_created)
 
         for job_id, job in sorted_jobs:
             datetime_str = str(datetime.datetime.fromtimestamp(job.time_created))
-            formats.append(
-                {
-                    "task_id": job_id,
-                    "status": job.status.name,
-                    "href": rhnode.url_path_for("_show", job_id=job_id),
-                    "date": datetime_str,
-                    "priority": job.priority,
-                }
-            )
+            runtime = job.get_runtime_str()
+            if runtime is None:
+                runtime = ""
+            formats.append(_get_job_info_dict(job, job_id))
 
         html_content = template.render(
             default_context=_get_default_context(), tasks=formats
         )
         return html_content
+
+    def _get_job_info_dict(job, job_id):
+        datetime_str = str(datetime.datetime.fromtimestamp(job.time_created))
+        runtime = job.get_runtime_str()
+        if runtime is None:
+            runtime = ""
+        return {
+            "task_id": job_id,
+            "status": job.status.name,
+            "href": rhnode.url_path_for("_show", job_id=job_id),
+            "date": datetime_str[:-7],
+            "priority": job.priority,
+            "runtime": runtime,
+        }
 
     @rhnode.get(rhnode._create_url("/jobs/{job_id}"), response_class=HTMLResponse)
     async def _show(job_id: str) -> HTMLResponse:
@@ -74,13 +83,15 @@ def setup_frontend_routes(rhnode):
 
         template = env.get_template("task.html")
 
+        info = _get_job_info_dict(job, job_id)
+        info = [{"name": k, "val": v} for k, v in info.items()]
         html_content = template.render(
             default_context=_get_default_context(),
             outputs=output,
             queue_status=job.status,
             queue_id=job_id,
+            info=info,
         )
-
         # Return the rendered webpage
         return html_content
 
