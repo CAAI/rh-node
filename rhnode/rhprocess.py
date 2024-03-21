@@ -12,6 +12,7 @@ from .common import *
 from contextlib import contextmanager
 import time
 from pydantic import ValidationError
+from datetime import datetime
 
 
 class RHProcess:
@@ -40,6 +41,8 @@ class RHProcess:
         self.error = None
         self.time_created = time.time()
         self.time_last_accessed = None
+        self.time_started = None
+        self.time_finished = None
         self.output = None
         self.input = inputs_no_files
 
@@ -157,6 +160,7 @@ class RHProcess:
 
                 await asyncio.sleep(3)
             try:
+                # print("Job,"+job.id)
                 yield gpu_id
             finally:
                 if queue_id:
@@ -206,6 +210,20 @@ class RHProcess:
         except ValidationError:
             return False
 
+    def get_runtime_str(self):
+        if self.time_started is None:
+            return None
+        else:
+            # convert timestamps to datetime object
+            dt1 = datetime.fromtimestamp(self.time_created)
+            if self.time_finished is None:
+                dt2 = datetime.fromtimestamp(time.time())
+            else:
+                dt2 = datetime.fromtimestamp(self.time_started)
+
+            delta = dt2 - dt1
+            return str(delta)[:-7]
+
     ## JOB RUNNING
     async def run(self, job):
         assert self.status == JobStatus.Preparing
@@ -230,6 +248,8 @@ class RHProcess:
         self.priority = job.priority
 
         async with self._maybe_wait_for_resources(job) as cuda_device:
+            print("Starting job...", self.ID)
+            self.time_started = time.time()
             ## Cancel signal might come in waiting for cuda queue
             if self.status == JobStatus.Cancelled:
                 return
@@ -249,6 +269,7 @@ class RHProcess:
                 args=(self.input.copy(), job.copy(), result_queue),
             )
             p.start()
+            print("Awaiting job to finish...", self.ID)
             while p.is_alive():
                 if self.status == JobStatus.Cancelling:
                     p.terminate()
@@ -260,6 +281,8 @@ class RHProcess:
                 await asyncio.sleep(3)
 
         response = result_queue.get()
+        print("Job finished...", self.ID, "response type:", response[0])
+        self.time_finished = time.time()
         if response[0] == "error":
             error_message = "".join(response[1])
             error_type = response[2]

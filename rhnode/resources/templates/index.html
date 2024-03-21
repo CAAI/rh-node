@@ -3,7 +3,7 @@
 {% block body %}
 
   <body>
-    <h3 class = "mt-5">Processes</h1>
+    <h3 class = "mt-5">Active jobs</h1>
     <table class="table">
       <thead>
         <tr>
@@ -11,34 +11,70 @@
           <th>Status</th>
           <th>Priority</th>
           <th>Created</th>
+          <th>Runtime</th>
         </tr>
       </thead>
       <tbody>
         {% for item in tasks %}
+        {% set valid = True %}
         {% if item.status == 'Preparing' %}
         <tr class="table-primary">
         {% elif item.status == 'Queued' %}
         <tr class="table-info">
         {% elif item.status == 'Running' %}
         <tr class="table-success">
-        {% elif item.status == 'Finished' %}
-        <tr class="table-default">
-        {% elif item.status == 'Error' %}
-        <tr class="table-danger">
         {% elif item.status == 'Cancelling' %}
-        <tr class="table-warning">
-        {% elif item.status == 'Cancelled' %}
-        <tr class="table-danger">
+        <tr class="table-warning">">
         {% else %}
-        <tr">
+        {% set valid = False %}
         {% endif %}          
-          <td><a href = "{{item.href}}">{{ item.task_id }}</a></td>
+        {% if valid %}
+        <td><a href = "{{item.href}}">{{ item.task_id }}</a></td>
           <td>{{ item.status }}</td>
             <td>{{ item.priority }}</td>
             <td>{{ item.date }}</td>
+            <td>{{ item.runtime }}</td>
         </tr>
+        {% endif %}
         {% endfor %}
       </tbody>
     </table>
+
+    <h3 class = "mt-5">Past jobs</h1>
+      <table class="table">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Status</th>
+            <th>Priority</th>
+            <th>Created</th>
+            <th>Runtime</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in tasks %}
+          {% set valid = True %}
+          {% if item.status == 'Finished' %}
+          <tr class="table-default">
+          {% elif item.status == 'Error' %}
+          <tr class="table-danger">
+          {% elif item.status == 'Cancelled' %}
+          <tr class="table-danger">
+          {% else %}
+          {% set valid = False %}
+          {% endif %}          
+          {% if valid %}
+          <td><a href = "{{item.href}}">{{ item.task_id }}</a></td>
+            <td>{{ item.status }}</td>
+              <td>{{ item.priority }}</td>
+              <td>{{ item.date }}</td>
+              <td>{{ item.runtime }}</td>
+          </tr>
+          {% endif %}
+          {% endfor %}
+        </tbody>
+      </table>
+
+
 
 {% endblock %}

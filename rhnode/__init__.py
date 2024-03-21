@@ -1,6 +1,6 @@
 try:
     from .rhnode import RHNode
-    from .rhjob import RHJob
+    from .rhjob import RHJob, MultiJobRunner
 
 except ImportError:
     pass

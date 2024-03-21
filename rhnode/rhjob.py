@@ -8,6 +8,68 @@ import json
 from requests.exceptions import HTTPError
 
 
+class MultiJobRunner:
+    """
+    A class to distribute massive amounts of jobs on different RHnode clusters.
+    """
+
+    def __init__(
+        self, jobs, on_job_finish_handle=None, queue_length=16, skip_on_error=True
+    ):
+        self.skip_on_error = skip_on_error
+        self.jobs = jobs
+        self.on_job_finish_handle = on_job_finish_handle
+        self.started_jobs = {}
+        self.queue_length = queue_length
+        self.n_total_jobs = len(jobs)
+
+    def _finish_job(self, job):
+        try:
+            outputs = job.wait_for_finish()
+            if self.on_job_finish_handle is not None:
+                inputs = job.input_data
+                self.on_job_finish_handle(inputs, outputs)
+        except (JobFailedError, JobCancelledError) as error:
+            if self.skip_on_error:
+                print(
+                    "job with inputs",
+                    str(job.input_data),
+                    "encountered an error or was cancelled, ignoring",
+                )
+            else:
+                raise
+
+    def _check_and_update_active_jobs(self):
+        IDs_to_remove = []
+        for i, (ID, job) in enumerate(self.started_jobs.items()):
+            if JobStatus(job._get_status()) in [
+                JobStatus.Finished,
+                JobStatus.Error,
+                JobStatus.Cancelled,
+            ]:
+                self._finish_job(self.started_jobs[ID])
+                IDs_to_remove.append(ID)
+
+        for ID in IDs_to_remove:
+            remaining_jobs = len(self.jobs) + len(self.started_jobs)
+            print(
+                "Finished job:", ID, f"completed:{remaining_jobs}/{self.n_total_jobs}"
+            )
+            del self.started_jobs[ID]
+
+        while len(self.jobs) > 0 and len(self.started_jobs) <= self.queue_length:
+            new_job = self.jobs.pop(0)
+            new_job.start()
+            self.started_jobs[new_job.ID] = new_job
+            time.sleep(0.5)
+
+    def start(self):
+        print(f"Start MultiRunner with {self.n_total_jobs} jobs")
+        while len(self.jobs) > 0 or len(self.started_jobs) > 0:
+            self._check_and_update_active_jobs()
+            time.sleep(10)
+
+
 class RHJob:
     def __init__(
         self,
@@ -296,6 +358,7 @@ class RHJob:
                 time.sleep(10)
             elif JobStatus(status) == JobStatus.Running:
                 time.sleep(4)
+        ##TODO what if status is Cancelling or other unhandled? Is server spammed with get_status requests?
 
         for key, value in output.items():
             if isinstance(value, str) and "/download/" in value:
@@ -311,10 +374,11 @@ class RHJob:
                         .split("=")[1]
                         .replace('"', "")
                     )
-                    self._maybe_make_output_directory(output_path)
                     fname = Path(os.path.join(output_path, fname)).absolute()
                 else:
                     fname = Path(self.output_data[key]).absolute()
+
+                self._maybe_make_output_directory(str(fname.parent.absolute()))
 
                 with open(fname, "wb") as f:
                     f.write(response.content)
