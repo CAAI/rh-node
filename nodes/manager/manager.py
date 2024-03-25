@@ -166,10 +166,10 @@ class ResourceQueue:
         return [
             {
                 "priority": job[0] * -1,
-                "job_id": job[1],
-                "required_gpu_mem": job[2],
-                "required_threads": job[3],
-                "required_memory": job[4],
+                "job_id": job[2],
+                "required_gpu_mem": job[3],
+                "required_threads": job[4],
+                "required_memory": job[5],
             }
             for job in self.job_queue
         ]
