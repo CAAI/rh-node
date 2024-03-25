@@ -21,7 +21,7 @@ from fastapi import Request
 from .version import __version__
 
 MANAGER_URL = "http://manager:8000/manager"
-# MANAGER_URL = "http://localhost:8000/manager"
+MANAGER_URL = "http://localhost:8000/manager"
 
 
 class RHNode(ABC, FastAPI):

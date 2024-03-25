@@ -10,9 +10,52 @@ from rhnode.common import QueueRequest, NodeMetaData
 from dotenv import load_dotenv
 from rhnode.version import __version__
 import time
+from pydantic import BaseModel, validator, computed_field
 
 # load env variables from .env file if it exists
 load_dotenv()
+
+
+class QueueItem:
+    def __init__(self, job):
+        self.job: Job = job
+
+    def __repr__(self):
+        return f"Queue item: {self.job}"
+
+    def __lt__(self, other):
+        self_args = (-self.job.priority, other.job.creation_time)
+        other_args = (-other.job.priority, other.job.creation_time)
+
+        for self_arg, other_arg in zip(self_args, other_args):
+            if self_arg > other_arg:
+                return False
+            elif self_arg < other_arg:
+                return True
+
+        return False
+
+
+class Job(BaseModel):
+    priority: int
+    ID: str
+    required_gpu_mem: int
+    required_memory: int
+    required_threads: int
+    creation_time: float = time.time()
+    gpu_device_id: int = None
+
+    @validator("priority")
+    def check_priority(cls, v):
+        if v < 1 or v > 5:
+            raise ValueError("Priority must be between 1 and 5.")
+        return v
+
+    @computed_field
+    @property
+    def href(self) -> int:
+        splits = self.ID.split("_")
+        return "/" + "_".join(splits[:-1]) + "/jobs/" + splits[-1]
 
 
 class ResourceQueue:
@@ -24,63 +67,57 @@ class ResourceQueue:
         self.memory_available = available_memory
         self.threads_max = available_threads
         self.memory_max = available_memory
-        self.job_queue = []
+        self.job_queue: list[QueueItem] = []
         self.active_jobs = {}
 
     def add_job(
         self, job_id, priority, required_gpu_mem, required_threads, required_memory
     ):
-        if priority < 1 or priority > 5:
-            raise ValueError("Priority must be between 1 and 5.")
-
+        job = Job(
+            ID=job_id,
+            priority=priority,
+            required_gpu_mem=required_gpu_mem,
+            required_threads=required_threads,
+            required_memory=required_memory,
+        )
         if (
-            required_gpu_mem > max(self.gpu_devices_mem_max)
-            or required_threads > self.threads_max
-            or required_memory > self.memory_max
+            job.required_gpu_mem > max(self.gpu_devices_mem_max)
+            or job.required_threads > self.threads_max
+            or job.required_memory > self.memory_max
         ):
             raise ValueError("Job requirements exceed available resources.")
-        heapq.heappush(
-            self.job_queue,
-            (
-                -priority,
-                time.time(),
-                job_id,
-                required_gpu_mem,
-                required_threads,
-                required_memory,
-            ),
-        )
+        heapq.heappush(self.job_queue, QueueItem(job))
         self.process_queue()
+
+    def _can_start(self, job):
+        # TODO Maybe this check will make non-gpu requiring jobs wait for gpu?
+        gpu_device_id = self.get_available_gpu_device(job.required_gpu_mem)
+        return (
+            gpu_device_id is not None
+            and self.threads_available >= job.required_threads
+            and self.memory_available >= job.required_memory
+        )
+
+    def _start(self, job):
+        device_id = self.get_available_gpu_device(job.required_gpu_mem)
+        self.gpu_devices_mem_available[device_id] -= job.required_gpu_mem
+        self.threads_available -= job.required_threads
+        self.memory_available -= job.required_memory
+        job.gpu_device_id = device_id
+
+    def _end(self, job):
+        self.gpu_devices_mem_available[job.gpu_device_id] += job.required_gpu_mem
+        self.threads_available += job.required_threads
+        self.memory_available += job.required_memory
 
     def process_queue(self):
         while self.job_queue:
-            (
-                _,
-                _,
-                job_id,
-                required_gpu_mem,
-                required_threads,
-                required_memory,
-            ) = self.job_queue[0]
+            job = self.job_queue[0].job
 
-            gpu_device_id = self.get_available_gpu_device(required_gpu_mem)
-            if (
-                gpu_device_id is not None
-                and self.threads_available >= required_threads
-                and self.memory_available >= required_memory
-            ):
+            if self._can_start(job):
                 heapq.heappop(self.job_queue)
-
-                self.gpu_devices_mem_available[gpu_device_id] -= required_gpu_mem
-                self.threads_available -= required_threads
-                self.memory_available -= required_memory
-
-                self.active_jobs[job_id] = (
-                    gpu_device_id,
-                    required_gpu_mem,
-                    required_threads,
-                    required_memory,
-                )
+                self._start(job)
+                self.active_jobs[job.ID] = job
             else:
                 break
 
@@ -92,19 +129,9 @@ class ResourceQueue:
 
     def end_job(self, job_id):
         if job_id in self.active_jobs:
-            (
-                gpu_device_id,
-                required_gpu_mem,
-                required_threads,
-                required_memory,
-            ) = self.active_jobs[job_id]
-
-            self.gpu_devices_mem_available[gpu_device_id] += required_gpu_mem
-            self.threads_available += required_threads
-            self.memory_available += required_memory
-
+            job = self.active_jobs[job_id]
+            self._end(job)
             del self.active_jobs[job_id]
-
         else:
             self.remove_job_from_queue(job_id)
 
@@ -112,14 +139,14 @@ class ResourceQueue:
 
     def is_job_active(self, job_id):
         if job_id in self.active_jobs:
-            gpu_device_id = self.active_jobs[job_id][0]
+            gpu_device_id = self.active_jobs[job_id].gpu_device_id
             return True, gpu_device_id
         else:
             return False, None
 
     def remove_job_from_queue(self, job_id):
-        for index, job in enumerate(self.job_queue):
-            if job[1] == job_id:
+        for index, jobq in enumerate(self.job_queue):
+            if jobq.job.ID == job_id:
                 self.job_queue.pop(index)
                 heapq.heapify(self.job_queue)
                 return True
@@ -143,53 +170,20 @@ class ResourceQueue:
     def get_queued_priorities(self):
         return [job[0] * -1 for job in self.job_queue]
 
-    def get_active_jobs_info(self):
-        active_jobs_info = []
-        for job_id, (
-            gpu_device_id,
-            required_gpu_mem,
-            required_threads,
-            required_memory,
-        ) in self.active_jobs.items():
-            active_jobs_info.append(
-                {
-                    "gpu_device_id": gpu_device_id,
-                    "required_gpu_mem": required_gpu_mem,
-                    "required_threads": required_threads,
-                    "required_memory": required_memory,
-                    "job_id": job_id,
-                }
-            )
-        return active_jobs_info
-
-    def get_queued_jobs_info(self):
-        return [
-            {
-                "priority": job[0] * -1,
-                "job_id": job[2],
-                "required_gpu_mem": job[3],
-                "required_threads": job[4],
-                "required_memory": job[5],
-            }
-            for job in self.job_queue
-        ]
-
     def get_load(self):
-        active_jobs_info = self.get_active_jobs_info()
-        queued_jobs_info = self.get_queued_jobs_info()
         sum_gpu_mem = (
             sum(self.gpu_devices_mem_max)
             if isinstance(self.gpu_devices_mem_max, list)
             else self.gpu_devices_mem_max
         )
         tot_required_gpu_mem = sum(
-            x["required_gpu_mem"] for x in active_jobs_info + queued_jobs_info
+            x.required_gpu_mem for x in list(self.active_jobs.values()) + self.job_queue
         )
         tot_required_mem = sum(
-            x["required_memory"] for x in active_jobs_info + queued_jobs_info
+            x.required_memory for x in list(self.active_jobs.values()) + self.job_queue
         )
         tot_required_threads = sum(
-            x["required_threads"] for x in active_jobs_info + queued_jobs_info
+            x.required_threads for x in list(self.active_jobs.values()) + self.job_queue
         )
 
         load = max(
@@ -308,11 +302,11 @@ class RHManager(FastAPI):
 
         @self.get("/manager/get_active_jobs")
         async def get_active_jobs():
-            return self.queue.get_active_jobs_info()
+            return [x.job.dict() for x in self.queue.active_jobs.values()]
 
         @self.get("/manager/get_queued_jobs")
         async def get_queued_jobs():
-            self.queue.get_queued_jobs_info()
+            return [x.job.dict() for x in self.queue.job_queue]
 
         @self.get("/manager/get_load")
         async def get_load():
@@ -336,17 +330,9 @@ class RHManager(FastAPI):
 
         @self.get("/manager")
         async def resource_queue(request: Request):
-            active_jobs = self.queue.get_active_jobs_info()
-            queued_jobs = self.queue.get_queued_jobs_info()
+            active_jobs = [x.dict() for x in self.queue.active_jobs.values()]
+            queued_jobs = [x.job.dict() for x in self.queue.job_queue]
             available_resources = self.queue.get_resource_info()
-
-            for active_job in active_jobs:
-                splits = active_job["job_id"].split("_")
-                active_job["href"] = "/" + "_".join(splits[:-1]) + "/jobs/" + splits[-1]
-
-            for queued_job in queued_jobs:
-                splits = queued_job["job_id"].split("_")
-                queued_job["href"] = "/" + "_".join(splits[:-1]) + "/jobs/" + splits[-1]
 
             host_name = self.host_addr.split(":")[0]
             other_managers = [
