@@ -10,30 +10,10 @@ from rhnode.common import QueueRequest, NodeMetaData
 from dotenv import load_dotenv
 from rhnode.version import __version__
 import time
-from pydantic import BaseModel, validator, computed_field
+from pydantic import BaseModel, validator
 
 # load env variables from .env file if it exists
 load_dotenv()
-
-
-class QueueItem:
-    def __init__(self, job):
-        self.job: Job = job
-
-    def __repr__(self):
-        return f"Queue item: {self.job}"
-
-    def __lt__(self, other):
-        self_args = (-self.job.priority, other.job.creation_time)
-        other_args = (-other.job.priority, other.job.creation_time)
-
-        for self_arg, other_arg in zip(self_args, other_args):
-            if self_arg > other_arg:
-                return False
-            elif self_arg < other_arg:
-                return True
-
-        return False
 
 
 class Job(BaseModel):
@@ -51,11 +31,25 @@ class Job(BaseModel):
             raise ValueError("Priority must be between 1 and 5.")
         return v
 
-    @computed_field
-    @property
-    def href(self) -> int:
-        splits = self.ID.split("_")
-        return "/" + "_".join(splits[:-1]) + "/jobs/" + splits[-1]
+
+class QueueItem:
+    def __init__(self, job):
+        self.job: Job = job
+
+    def __repr__(self):
+        return f"Queue item: {self.job}"
+
+    def __lt__(self, other: Job):
+        self_args = (-self.job.priority, other.job.creation_time)
+        other_args = (-other.job.priority, other.job.creation_time)
+
+        for self_arg, other_arg in zip(self_args, other_args):
+            if self_arg > other_arg:
+                return False
+            elif self_arg < other_arg:
+                return True
+
+        return False
 
 
 class ResourceQueue:
@@ -332,6 +326,13 @@ class RHManager(FastAPI):
         async def resource_queue(request: Request):
             active_jobs = [x.dict() for x in self.queue.active_jobs.values()]
             queued_jobs = [x.job.dict() for x in self.queue.job_queue]
+            for job in active_jobs:
+                splits = job["ID"].split("_")
+                job["href"] = "/" + "_".join(splits[:-1]) + "/jobs/" + splits[-1]
+            for job in queued_jobs:
+                splits = job["ID"].split("_")
+                job["href"] = "/" + "_".join(splits[:-1]) + "/jobs/" + splits[-1]
+
             available_resources = self.queue.get_resource_info()
 
             host_name = self.host_addr.split(":")[0]
