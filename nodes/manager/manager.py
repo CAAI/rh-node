@@ -170,15 +170,10 @@ class ResourceQueue:
             if isinstance(self.gpu_devices_mem_max, list)
             else self.gpu_devices_mem_max
         )
-        tot_required_gpu_mem = sum(
-            x.required_gpu_mem for x in list(self.active_jobs.values()) + self.job_queue
-        )
-        tot_required_mem = sum(
-            x.required_memory for x in list(self.active_jobs.values()) + self.job_queue
-        )
-        tot_required_threads = sum(
-            x.required_threads for x in list(self.active_jobs.values()) + self.job_queue
-        )
+        total_jobs = list(self.active_jobs.values()) + [x.job for x in self.job_queue]
+        tot_required_gpu_mem = sum(x.required_gpu_mem for x in total_jobs)
+        tot_required_mem = sum(x.required_memory for x in total_jobs)
+        tot_required_threads = sum(x.required_threads for x in total_jobs)
 
         load = max(
             tot_required_gpu_mem / sum_gpu_mem,
