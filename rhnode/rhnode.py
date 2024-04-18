@@ -76,23 +76,34 @@ class RHNode(ABC, FastAPI):
         setup_frontend_routes(self)
 
     def _delete_job(self, job_id):
+        print("DELETING", job_id)
         job = self.jobs[job_id]
         job.delete_files()
         del self.jobs[job_id]
 
-    def _get_expired_job_ids(self, max_age_hours=8):
-        """Get a list of job IDs that have been in the queue for longer than max_age_hours"""
+    def _get_expired_job_ids(self, max_finished_mins=10):
+        """Get a list of job IDs that have been finished for longer than max_finished_mins"""
         expired_job_ids = []
+        current_time = time.time()
         for job_id, job in self.jobs.items():
-            if (time.time() - job.time_created) / 3600 > max_age_hours:
-                if job.status in [
-                    JobStatus.Finished,
-                    JobStatus.Error,
-                    JobStatus.Cancelled,
-                ]:
-                    expired_job_ids.append(job_id)
+            if job.time_finished is not None:
+                if (current_time - job.time_finished) / 60 > max_finished_mins:
+                    if job.status in [
+                        JobStatus.Finished,
+                        JobStatus.Error,
+                        JobStatus.Cancelled,
+                    ]:
+                        expired_job_ids.append(job_id)
 
         return expired_job_ids
+
+    def _run_cleanup(self):
+        print("Checking for expired jobs...")
+        jobs = self._get_expired_job_ids()
+
+        for job_id in jobs:
+            print("Deleting job", job_id)
+            self._delete_job(job_id)
 
     async def _delete_expired_jobs_loop(
         self, hour: int = 3, minute: int = 30, second: int = 0
@@ -113,11 +124,7 @@ class RHNode(ABC, FastAPI):
             delay = (next_run - now).total_seconds()
             print("Next check in", delay, "seconds")
             await asyncio.sleep(delay)
-            print("Checking for expired jobs...")
-            jobs = self._get_expired_job_ids()
-            for job_id in jobs:
-                print("Deleting job", job_id)
-                self._delete_job(job_id)
+            self._run_cleanup()
 
     def get_job_by_id(self, job_id: str):
         try:
