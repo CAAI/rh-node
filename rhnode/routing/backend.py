@@ -116,6 +116,14 @@ def setup_api_routes(rhnode):
     async def _get_job_input():
         return rhnode.help_cli_args()
 
+    @rhnode.get(rhnode._create_url("/clean_jobs"))
+    async def _clean_jobs():
+        if rhnode.rhnode_mode == "dev":
+            rhnode._run_cleanup()
+            return "ok"
+        else:
+            return "not in dev mode " + str(rhnode.rhnode_mode)
+
     @rhnode.post(rhnode._create_url("/jobs/{job_id}/upload"))
     async def _upload(
         job_id: str,

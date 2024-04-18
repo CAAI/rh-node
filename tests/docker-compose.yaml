@@ -59,6 +59,7 @@ services:
       - "traefik.http.routers.add.rule=PathPrefix(`/add`)"
     environment:
       RH_EMAIL_ON_ERROR: christian.hinge@regionh.dk
+      RH_MODE: dev
       TZ: "Europe/Copenhagen"
 
   ## Testnode: OutputDirectory     

@@ -10,7 +10,7 @@ from rhnode.common import QueueRequest, NodeMetaData
 from dotenv import load_dotenv
 from rhnode.version import __version__
 import time
-from pydantic import BaseModel, validator
+from pydantic import BaseModel, validator, root_validator
 
 # load env variables from .env file if it exists
 load_dotenv()
@@ -22,8 +22,17 @@ class Job(BaseModel):
     required_gpu_mem: int
     required_memory: int
     required_threads: int
-    creation_time: float = time.time()
+    creation_time: float = None
     gpu_device_id: int = None
+
+    class Config:
+        validate_assignment = True
+
+    @root_validator
+    def number_validator(cls, values):
+        if values["creation_time"] is None:
+            values["creation_time"] = time.time()
+        return values
 
     @validator("priority")
     def check_priority(cls, v):
@@ -39,8 +48,8 @@ class QueueItem:
     def __repr__(self):
         return f"Queue item: {self.job}"
 
-    def __lt__(self, other: Job):
-        self_args = (-self.job.priority, other.job.creation_time)
+    def __lt__(self, other):
+        self_args = (-self.job.priority, self.job.creation_time)
         other_args = (-other.job.priority, other.job.creation_time)
 
         for self_arg, other_arg in zip(self_args, other_args):
