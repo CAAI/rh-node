@@ -1,1 +1,2 @@
 recursive-include rhnode/resources *
+recursive-include rhnode/routing *
