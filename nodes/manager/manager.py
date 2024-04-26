@@ -238,19 +238,22 @@ class RHManager(FastAPI):
 
         # query other hosts for available gpu
         for addr in self.other_addrs:
-            url = f"http://{addr}/manager/dispatcher/has_node/{node_name}"
-            response = requests.get(url)
-            response.raise_for_status()
-            has_node = response.json()
-            assert isinstance(has_node, bool)
-            if has_node:
-                url = f"http://{addr}/manager/get_load"
+            try:
+                url = f"http://{addr}/manager/dispatcher/has_node/{node_name}"
                 response = requests.get(url)
                 response.raise_for_status()
-                node_load = response.json()
-                if lowest_load == None or node_load < lowest_load:
-                    lowest_load = node_load
-                    addr_with_lowest_load = addr
+                has_node = response.json()
+                assert isinstance(has_node, bool)
+                if has_node:
+                    url = f"http://{addr}/manager/get_load"
+                    response = requests.get(url)
+                    response.raise_for_status()
+                    node_load = response.json()
+                    if lowest_load == None or node_load < lowest_load:
+                        lowest_load = node_load
+                        addr_with_lowest_load = addr
+            except:
+                print("ERROR contacting other server")
 
         if addr_with_lowest_load is not None:
             return addr_with_lowest_load
