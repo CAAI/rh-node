@@ -1,7 +1,7 @@
 uvicorn
 requests
 jinja2
-pydantic
+pydantic<2
 fastapi
 python-multipart
 fastapi-utils
