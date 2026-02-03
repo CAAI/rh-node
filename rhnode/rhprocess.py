@@ -219,7 +219,7 @@ class RHProcess:
             if self.time_finished is None:
                 dt2 = datetime.fromtimestamp(time.time())
             else:
-                dt2 = datetime.fromtimestamp(self.time_started)
+                dt2 = datetime.fromtimestamp(self.time_finished)
 
             delta = dt2 - dt1
             return str(delta)[:-7]

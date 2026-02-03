@@ -35,6 +35,7 @@ class MultiJobRunner:
                     "job with inputs",
                     str(job.input_data),
                     "encountered an error or was cancelled, ignoring",
+                    str(error),
                 )
             else:
                 raise
@@ -51,10 +52,10 @@ class MultiJobRunner:
                 IDs_to_remove.append(ID)
 
         for ID in IDs_to_remove:
-            remaining_jobs = len(self.jobs) + len(self.started_jobs)
-            print(
-                "Finished job:", ID, f"completed:{remaining_jobs}/{self.n_total_jobs}"
+            completed_jobs = self.n_total_jobs - (
+                len(self.jobs) + len(self.started_jobs)
             )
+            print("Finished job:", ID, f"\n{completed_jobs}/{self.n_total_jobs}\n")
             del self.started_jobs[ID]
 
         while len(self.jobs) > 0 and len(self.started_jobs) <= self.queue_length:
