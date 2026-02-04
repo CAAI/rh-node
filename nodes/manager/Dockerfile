@@ -1,5 +1,5 @@
 #System
-FROM python:3.8
+FROM python:3.12
 
 #Changes frequently
 COPY rhnode rhnode
