@@ -26,7 +26,7 @@ setup(
         "uvicorn",
         "requests",
         "jinja2",
-        "pydantic",
+        "pydantic<2.0",
         "fastapi",
         "python-multipart",
         "fastapi-utils",
